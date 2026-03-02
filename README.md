@@ -2,25 +2,26 @@
 
 [中文文档](README_zh.md)
 
-A lightweight, high-performance RPC framework based on Java 17, Netty 4.1.x, and ZooKeeper. Built with Domain-Driven Design (DDD) layering and Test-Driven Development (TDD) principles, boasting >80% test coverage across all modules.
+A lightweight, high-performance RPC framework based on Java 17, Netty 4.1.x, and ZooKeeper. Built on a Microkernel Architecture (Core + SPI Plugins) and Test-Driven Development (TDD) principles, boasting >80% test coverage across all modules.
 
 ## Architecture
 
 ```text
-┌──────────────────────────────────────────────────────────────────────┐
-│                     netty-rpc-application                           │
-│  RpcBootstrap (@RpcService / @RpcReference)                         │
-│  RpcClientProxy ←→ NettyClient ←→ PendingRequests                   │
-│  RpcServer ←→ RpcServerHandler (Reflection + Business Thread Pool)  │
-├──────────────────────────────────────────────────────────────────────┤
-│                    netty-rpc-infrastructure                         │
-│  RpcEncoder/Decoder   Jdk/ProtobufSerializer   ZkRegistry/Discovery │
-│  Random/RoundRobin/ConsistentHash LoadBalancer                      │
-├──────────────────────────────────────────────────────────────────────┤
-│                       netty-rpc-domain                              │
-│  RpcRequest/Response  RpcMessage  ProtocolConstants  MessageType     │
-│  Serializer(I)  ServiceRegistry(I)  ServiceDiscovery(I)  LoadBalancer(I)│
-└──────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                  netty-rpc-core (Core Engine)              │
+│  RpcBootstrap        PendingRequests       RpcClientProxy  │
+│  RpcServerHandler    NettyClient / Server  Codec           │
+├────────────────────────────────────────────────────────────┤
+│                  netty-rpc-api (SPI / Interfaces)          │
+│  Serializer      LoadBalancer    Registry      Discovery   │
+├────────────────────────────────────────────────────────────┤
+│                  Plugin Implementations                    │
+│  [netty-rpc-registry-zk]   (ZooKeeper/Curator)             │
+│  [Future: nacos-registry, kryo-serializer...]              │
+├────────────────────────────────────────────────────────────┤
+│                  netty-rpc-common                          │
+│  RpcRequest/Response       @RpcService / @RpcReference     │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ## Tech Stack
@@ -82,10 +83,11 @@ mvn clean test jacoco:report
 
 | Module                      | Responsibility |
 |-----------------------------|----------------|
-| `netty-rpc-domain`         | Core models, interfaces, exception definitions (No external dependencies) |
-| `netty-rpc-infrastructure` | Netty codecs, ZK registry, serialization, load balancing implementations |
-| `netty-rpc-application`    | Bootstrap, client proxy, server coordination, Future management |
-| `netty-rpc-examples`       | Demo examples using `@RpcService` and `@RpcReference` |
+| `netty-rpc-common`         | Core models, annotations, exception definitions (Shared data) |
+| `netty-rpc-api`            | Microkernel API interfaces (Registry, LoadBalancer, Serializer) |
+| `netty-rpc-core`           | Core execution engine (Bootstrap, proxies, networking, Futures) |
+| `netty-rpc-registry-zk`    | Plugin: ZooKeeper Curator-based registry and discovery |
+| `netty-rpc-examples`       | Demo examples connecting Provider and Consumer |
 
 ## Design Patterns
 
@@ -98,7 +100,8 @@ mvn clean test jacoco:report
 
 | Module         | Coverage | Tests |
 |---------------|---------|-------|
-| Domain        | 92%     | 21    |
-| Infrastructure| >85%    | 48    |
-| Application   | >85%    | 22    |
-| **Total**     | **>80%**| **91**|
+| Common        | 92%     | 21    |
+| API           | 100%    | 0     |
+| Core          | >85%    | 40    |
+| Registry(ZK)  | >85%    | 2     |
+| **Total**     | **>80%**| **63**|

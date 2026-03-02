@@ -1,11 +1,11 @@
 package com.xujn.nettyrpc.examples.consumer;
 
-import com.xujn.nettyrpc.application.bootstrap.RpcBootstrap;
+import com.xujn.nettyrpc.core.bootstrap.RpcBootstrap;
 import com.xujn.nettyrpc.examples.api.HelloService;
-import com.xujn.nettyrpc.domain.annotation.RpcReference;
-import com.xujn.nettyrpc.infrastructure.loadbalance.RoundRobinLoadBalancer;
-import com.xujn.nettyrpc.infrastructure.registry.ZkServiceDiscovery;
-import com.xujn.nettyrpc.infrastructure.serialization.ProtobufSerializer;
+import com.xujn.nettyrpc.common.annotation.RpcReference;
+import com.xujn.nettyrpc.core.loadbalance.RoundRobinLoadBalancer;
+import com.xujn.nettyrpc.registry.zk.ZkServiceDiscovery;
+import com.xujn.nettyrpc.core.serialization.ProtobufSerializer;
 
 public class ConsumerApp {
 

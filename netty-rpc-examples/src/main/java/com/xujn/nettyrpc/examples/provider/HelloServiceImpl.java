@@ -1,7 +1,7 @@
 package com.xujn.nettyrpc.examples.provider;
 
 import com.xujn.nettyrpc.examples.api.HelloService;
-import com.xujn.nettyrpc.domain.annotation.RpcService;
+import com.xujn.nettyrpc.common.annotation.RpcService;
 
 /**
  * Service Implementation using the @RpcService annotation.

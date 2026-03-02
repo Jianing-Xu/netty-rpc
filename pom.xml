@@ -12,9 +12,10 @@
     <description>A lightweight, high-performance RPC framework built on Netty and ZooKeeper</description>
 
     <modules>
-        <module>netty-rpc-domain</module>
-        <module>netty-rpc-infrastructure</module>
-        <module>netty-rpc-application</module>
+        <module>netty-rpc-common</module>
+        <module>netty-rpc-api</module>
+        <module>netty-rpc-core</module>
+        <module>netty-rpc-registry-zk</module>
         <module>netty-rpc-examples</module>
     </modules>
 
@@ -38,19 +39,25 @@
             <!-- Internal modules -->
             <dependency>
                 <groupId>com.xujn</groupId>
-                <artifactId>netty-rpc-domain</artifactId>
+                <artifactId>netty-rpc-common</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.xujn</groupId>
-                <artifactId>netty-rpc-infrastructure</artifactId>
+                <artifactId>netty-rpc-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.xujn</groupId>
-                <artifactId>netty-rpc-application</artifactId>
+                <artifactId>netty-rpc-registry-zk</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.xujn</groupId>
+                <artifactId>netty-rpc-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
             <dependency>
                 <groupId>com.xujn</groupId>
                 <artifactId>netty-rpc-examples</artifactId>

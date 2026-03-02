@@ -16,32 +16,34 @@
 
 ## 2. 项目结构
 
-```
+```text
 netty-rpc/
 ├── pom.xml                              # 父 POM (依赖管理 + JaCoCo)
 │
-├── netty-rpc-domain/                    # 领域层（无外部依赖）
-│   └── src/main/java/com/xujn/nettyrpc/domain/
-│       ├── model/                       # RpcRequest, RpcResponse, RpcMessage,
-│       │                                # RpcProtocolHeader, ProtocolConstants,
-│       │                                # MessageType, SerializationType
-│       ├── protocol/                    # Serializer 接口
-│       ├── registry/                    # ServiceRegistry, ServiceDiscovery 接口
-│       ├── loadbalance/                 # LoadBalancer 接口
+├── netty-rpc-common/                    # 公共基础模块（Models、Annotations）
+│   └── src/main/java/com/xujn/nettyrpc/common/
+│       ├── model/                       # RpcRequest, RpcResponse, RpcMessage
+│       ├── annotation/                  # @RpcService, @RpcReference
 │       └── exception/                   # RpcException
 │
-├── netty-rpc-infrastructure/            # 基础设施层（依赖 Domain + Netty + Curator）
-│   └── src/main/java/com/xujn/nettyrpc/infrastructure/
-│       ├── serialization/               # JdkSerializer
-│       ├── codec/                       # RpcEncoder, RpcDecoder
-│       ├── registry/                    # ZkServiceRegistry, ZkServiceDiscovery
-│       └── loadbalance/                 # RandomLoadBalancer, RoundRobinLoadBalancer
+├── netty-rpc-api/                       # 核心 SPI 接口定义（不包含具体实现）
+│   └── src/main/java/com/xujn/nettyrpc/api/
+│       ├── serialization/               # Serializer 接口
+│       ├── registry/                    # ServiceRegistry, ServiceDiscovery 接口
+│       └── loadbalance/                 # LoadBalancer 接口
 │
-├── netty-rpc-application/               # 应用层（依赖 Domain + Infrastructure + Netty）
-│   └── src/main/java/com/xujn/nettyrpc/application/
-│       ├── client/                      # RpcClientProxy, NettyClient,
-│       │                                # RpcClientHandler, PendingRequests
-│       └── server/                      # RpcServer, RpcServerHandler
+├── netty-rpc-core/                      # RPC 核心执行引擎
+│   └── src/main/java/com/xujn/nettyrpc/core/
+│       ├── bootstrap/                   # RpcBootstrap (启动环境与注入)
+│       ├── client/                      # RpcClientProxy, NettyClient, PendingRequests
+│       ├── server/                      # RpcServer, RpcServerHandler
+│       ├── codec/                       # RpcEncoder, RpcDecoder
+│       ├── serialization/               # JdkSerializer, ProtobufSerializer
+│       └── loadbalance/                 # RandomLoadBalancer, RoundRobin...
+│
+├── netty-rpc-registry-zk/               # SPI 插件实现：ZooKeeper 注册中心
+│   └── src/main/java/com/xujn/nettyrpc/registry/zk/
+│       └── ZkServiceRegistry, ZkServiceDiscovery
 │
 └── docs/                                # 项目文档
 ```
@@ -62,10 +64,11 @@ mvn clean install
 # 全部测试
 mvn clean test
 
+```bash
 # 仅测试某个模块
-mvn clean test -pl netty-rpc-domain
-mvn clean test -pl netty-rpc-infrastructure -am
-mvn clean test -pl netty-rpc-application -am
+mvn clean test -pl netty-rpc-common
+mvn clean test -pl netty-rpc-core -am
+mvn clean test -pl netty-rpc-registry-zk -am
 ```
 
 ### 3.3 覆盖率报告
@@ -99,11 +102,11 @@ mvn clean test -Djacoco.skip=true
 
 | 层级 | 测试方式 | 示例 |
 |------|---------|------|
-| Domain | 纯单元测试 | `RpcRequestTest` 验证模型构造、equals/hashCode |
-| Infrastructure | 组件测试 | `RpcCodecTest` 使用 `EmbeddedChannel` 验证编解码 |
-| Infrastructure | 集成测试 | `ZkRegistryTest` 使用 `TestingServer` 验证 ZK 交互 |
-| Application | 单元测试 | `RpcServerHandlerTest` 验证反射调用逻辑 |
-| Application | 端到端测试 | `IntegrationTest` 启动完整 Server + Client 验证调用链 |
+| Common | 纯单元测试 | `RpcRequestTest` 验证模型构造、equals/hashCode |
+| Core | 组件测试 | `RpcCodecTest` 使用 `EmbeddedChannel` 验证编解码 |
+| Core | 单元测试 | `RpcServerHandlerTest` 验证反射调用逻辑 |
+| Registry | 集成测试 | `ZkRegistryTest` 使用 `TestingServer` 验证 ZK 交互 |
+| Core | 端到端测试 | `IntegrationTest` 启动完整 Server + Client 验证调用链 |
 
 ---
 
@@ -111,10 +114,10 @@ mvn clean test -Djacoco.skip=true
 
 ### 5.1 新增序列化方式
 
-1. 在 `netty-rpc-infrastructure` 中实现 `Serializer` 接口：
+1. 在 `netty-rpc-core` (或建立独立插件模块) 中实现 `Serializer` 接口：
 
 ```java
-package com.xujn.nettyrpc.infrastructure.serialization;
+package com.xujn.nettyrpc.core.serialization;
 
 public class GsonSerializer implements Serializer {
     @Override

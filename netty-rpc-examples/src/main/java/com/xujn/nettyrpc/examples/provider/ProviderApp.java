@@ -1,8 +1,8 @@
 package com.xujn.nettyrpc.examples.provider;
 
-import com.xujn.nettyrpc.application.bootstrap.RpcBootstrap;
-import com.xujn.nettyrpc.infrastructure.registry.ZkServiceRegistry;
-import com.xujn.nettyrpc.infrastructure.serialization.ProtobufSerializer;
+import com.xujn.nettyrpc.core.bootstrap.RpcBootstrap;
+import com.xujn.nettyrpc.registry.zk.ZkServiceRegistry;
+import com.xujn.nettyrpc.core.serialization.ProtobufSerializer;
 
 public class ProviderApp {
     public static void main(String[] args) throws InterruptedException {

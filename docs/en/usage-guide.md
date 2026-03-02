@@ -42,7 +42,7 @@ Use the `@RpcService` annotation to mark your implementation class:
 package com.xujn.nettyrpc.example.provider;
 
 import com.xujn.nettyrpc.example.api.HelloService;
-import com.xujn.nettyrpc.domain.annotation.RpcService;
+import com.xujn.nettyrpc.common.annotation.RpcService;
 
 @RpcService(HelloService.class)
 public class HelloServiceImpl implements HelloService {
@@ -67,8 +67,8 @@ Use `RpcBootstrap` to scan packages and automatically deploy your annotated serv
 ```java
 package com.xujn.nettyrpc.example.provider;
 
-import com.xujn.nettyrpc.application.bootstrap.RpcBootstrap;
-import com.xujn.nettyrpc.infrastructure.registry.ZkServiceRegistry;
+import com.xujn.nettyrpc.core.bootstrap.RpcBootstrap;
+import com.xujn.nettyrpc.registry.zk.ZkServiceRegistry;
 
 public class ServerApp {
     public static void main(String[] args) throws Exception {
@@ -103,10 +103,10 @@ Use the `@RpcReference` annotation to automatically inject proxy instances via `
 ```java
 package com.xujn.nettyrpc.example.consumer;
 
-import com.xujn.nettyrpc.application.bootstrap.RpcBootstrap;
+import com.xujn.nettyrpc.core.bootstrap.RpcBootstrap;
 import com.xujn.nettyrpc.example.api.HelloService;
-import com.xujn.nettyrpc.domain.annotation.RpcReference;
-import com.xujn.nettyrpc.infrastructure.registry.ZkServiceDiscovery;
+import com.xujn.nettyrpc.common.annotation.RpcReference;
+import com.xujn.nettyrpc.registry.zk.ZkServiceDiscovery;
 
 public class ClientApp {
 
@@ -168,7 +168,7 @@ RpcBootstrap btB = RpcBootstrap.builder().host("127.0.0.1").port(8081).build();
 The default is `RoundRobinLoadBalancer`. You can effortlessly switch policies—such as Consistent Hashing—during client Bootstrap building:
 
 ```java
-import com.xujn.nettyrpc.infrastructure.loadbalance.ConsistentHashLoadBalancer;
+import com.xujn.nettyrpc.core.loadbalance.ConsistentHashLoadBalancer;
 
 RpcBootstrap bootstrap = RpcBootstrap.builder()
         .discovery(new ZkServiceDiscovery("127.0.0.1:2181"))

@@ -4,7 +4,7 @@
 
 ## 1. 项目概述
 
-`netty-rpc` 是一个基于 Java 17、Netty 4.1.x 与 ZooKeeper 构建的工程级 RPC 框架。项目采用 **DDD 分层架构** 和 **TDD 驱动开发**，覆盖了 RPC 框架的核心组成部分：通信协议、编解码、服务注册发现、代理调用、负载均衡、超时容错。
+`netty-rpc` 是一个基于 Java 17、Netty 4.1.x 与 ZooKeeper 构建的工程级 RPC 框架。项目采用最新的 **微内核架构（核心 SPI + 扩展插件）** 和 **TDD 驱动开发**，覆盖了 RPC 框架的核心组成部分：通信协议、编解码、服务注册发现、代理调用、负载均衡、超时容错。
 
 ---
 
@@ -25,42 +25,43 @@
 
 ## 3. 架构设计
 
-### 3.1 DDD 分层架构
+### 3.1 微内核组件架构（Microkernel + SPI）
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Application Layer                            │
-│  职责：用例编排、代理生成、传输协调、Future 映射                    │
-│  依赖：Domain + Infrastructure                                  │
+│                    netty-rpc-core (Core Engine)                 │
+│  职责：引导程序、代理生成、传输协调、Future 映射、连接管理                │
 │                                                                 │
 │  ┌─────────────┐ ┌──────────────┐ ┌──────────────────┐          │
-│  │RpcClientProxy│ │ NettyClient  │ │  RpcServer        │         │
-│  │ (动态代理)   │ │ (连接管理)    │ │  (服务端启动)      │         │
+│  │RpcBootstrap │ │ NettyClient  │ │  RpcServer        │         │
+│  │(注解扫包暴露) │ │ (TCP 连接管理)│ │  (服务端监听启动)     │         │
 │  └──────┬──────┘ └──────┬───────┘ └───────┬──────────┘          │
 │         │               │                 │                     │
 │  ┌──────┴──────┐ ┌──────┴───────┐ ┌───────┴──────────┐         │
-│  │PendingReqs  │ │RpcClientHdlr │ │RpcServerHandler   │        │
-│  │ (Future管理) │ │ (响应接收)   │ │ (反射+线程池隔离)   │        │
+│  │PendingReqs  │ │RpcClientProxy│ │RpcServerHandler   │        │
+│  │ (Future交互) │ │ (动态拦截组装) │ │ (反射+线程池处理)   │        │
 │  └─────────────┘ └──────────────┘ └──────────────────┘          │
 ├─────────────────────────────────────────────────────────────────┤
-│                   Infrastructure Layer                          │
-│  职责：技术实现、外部系统适配                                     │
-│  依赖：Domain                                                   │
+│                   netty-rpc-api (SPI 扩展点规范)                 │
+│  职责：纯技术接口契约，与具体实现框架解耦（SPI Base）                  │
 │                                                                 │
 │  ┌─────────────┐ ┌────────────────┐ ┌──────────────────┐      │
-│  │ RpcEncoder   │ │ JdkSerializer   │ │ZkServiceRegistry │      │
-│  │ RpcDecoder   │ │ ProtobufSerializer│ │ZkServiceDiscovery│      │
+│  │ Serializer   │ │ LoadBalancer   │ │ServiceRegistry    │      │
+│  │ (序列化接口)   │ │ (负载均衡接口)   │ │ServiceDiscovery   │      │
 │  └─────────────┘ └────────────────┘ └──────────────────┘      │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │ RandomLB / RoundRobinLB / ConsistentHashLoadBalancer    │    │
-│  └─────────────────────────────────────────────────────────┘    │
 ├─────────────────────────────────────────────────────────────────┤
-│                      Domain Layer                               │
-│  职责：纯业务规则、接口契约、无技术依赖                            │
+│                   插件实现层 (Plugin Implementations)            │
+│  职责：对 API 的具体技术实现，可自由插拔和替换                        │
+│                                                                 │
+│  [netty-rpc-registry-zk]     -> 基于 Curator + ZooKeeper 的注册实现 │
+│  [netty-rpc-core 的内置实现]  -> Netty 编解码器、Protostuff 序列化    │
+├─────────────────────────────────────────────────────────────────┤
+│                      netty-rpc-common                           │
+│  职责：基础公共模型、全局异常定义、网络共享常量，全模块依赖。               │
 │                                                                 │
 │  Models:  RpcRequest, RpcResponse, RpcMessage, RpcProtocolHeader│
 │  Enums:   MessageType, SerializationType, ProtocolConstants     │
-│  Ifaces:  Serializer, LoadBalancer, ServiceRegistry, Discovery  │
+│  Annots:  @RpcService, @RpcReference                            │
 │  Except:  RpcException                                          │
 └─────────────────────────────────────────────────────────────────┘
 ```

@@ -42,7 +42,7 @@ public interface HelloService {
 package com.xujn.nettyrpc.example.provider;
 
 import com.xujn.nettyrpc.example.api.HelloService;
-import com.xujn.nettyrpc.domain.annotation.RpcService;
+import com.xujn.nettyrpc.common.annotation.RpcService;
 
 @RpcService(HelloService.class)
 public class HelloServiceImpl implements HelloService {
@@ -67,8 +67,8 @@ public class HelloServiceImpl implements HelloService {
 ```java
 package com.xujn.nettyrpc.example.provider;
 
-import com.xujn.nettyrpc.application.bootstrap.RpcBootstrap;
-import com.xujn.nettyrpc.infrastructure.registry.ZkServiceRegistry;
+import com.xujn.nettyrpc.core.bootstrap.RpcBootstrap;
+import com.xujn.nettyrpc.registry.zk.ZkServiceRegistry;
 
 public class ServerApp {
     public static void main(String[] args) throws Exception {
@@ -103,10 +103,10 @@ public class ServerApp {
 ```java
 package com.xujn.nettyrpc.example.consumer;
 
-import com.xujn.nettyrpc.application.bootstrap.RpcBootstrap;
+import com.xujn.nettyrpc.core.bootstrap.RpcBootstrap;
 import com.xujn.nettyrpc.example.api.HelloService;
-import com.xujn.nettyrpc.domain.annotation.RpcReference;
-import com.xujn.nettyrpc.infrastructure.registry.ZkServiceDiscovery;
+import com.xujn.nettyrpc.common.annotation.RpcReference;
+import com.xujn.nettyrpc.registry.zk.ZkServiceDiscovery;
 
 public class ClientApp {
 

@@ -2,25 +2,26 @@
 
 [English Document](README.md)
 
-基于 Java 17、Netty 4.1.x 与 ZooKeeper 的轻量级高性能 RPC 框架。采用 DDD 分层架构，TDD 驱动开发，全模块测试覆盖率 >80%。
+基于 Java 17、Netty 4.1.x 与 ZooKeeper 的轻量级高性能 RPC 框架。采用微内核架构（核心分离机制 + SPI 插件扩展），并以 TDD 驱动开发，全模块测试覆盖率 >80%。
 
 ## 架构
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                     netty-rpc-application                           │
-│  RpcBootstrap (@RpcService / @RpcReference)                         │
-│  RpcClientProxy ←→ NettyClient ←→ PendingRequests                   │
-│  RpcServer ←→ RpcServerHandler (反射调用 + 业务线程池隔离)            │
-├──────────────────────────────────────────────────────────────────────┤
-│                    netty-rpc-infrastructure                         │
-│  RpcEncoder/Decoder   Jdk/ProtobufSerializer   ZkRegistry/Discovery │
-│  Random/RoundRobin/ConsistentHash LoadBalancer                      │
-├──────────────────────────────────────────────────────────────────────┤
-│                       netty-rpc-domain                              │
-│  RpcRequest/Response  RpcMessage  ProtocolConstants  MessageType     │
-│  Serializer(I)  ServiceRegistry(I)  ServiceDiscovery(I)  LoadBalancer(I)│
-└──────────────────────────────────────────────────────────────────────┘
+```text
+┌────────────────────────────────────────────────────────────┐
+│                  netty-rpc-core (核心执行引擎)               │
+│  RpcBootstrap        PendingRequests       RpcClientProxy  │
+│  RpcServerHandler    NettyClient / Server  Codec           │
+├────────────────────────────────────────────────────────────┤
+│                  netty-rpc-api (SPI 扩展规范)               │
+│  Serializer      LoadBalancer    Registry      Discovery   │
+├────────────────────────────────────────────────────────────┤
+│                  插件实现 (Plugin Implementations)          │
+│  [netty-rpc-registry-zk]   (ZooKeeper/Curator)             │
+│  [Future: nacos-registry, kryo-serializer...]              │
+├────────────────────────────────────────────────────────────┤
+│                  netty-rpc-common                          │
+│  RpcRequest/Response       @RpcService / @RpcReference     │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ## 技术栈
@@ -82,10 +83,11 @@ mvn clean test jacoco:report
 
 | 模块                        | 职责                                           |
 |----------------------------|----------------------------------------------|
-| `netty-rpc-domain`         | 核心模型、接口、异常定义（无外部依赖）              |
-| `netty-rpc-infrastructure` | Netty 编解码器、ZK 注册发现、序列化、负载均衡实现    |
-| `netty-rpc-application`    | 启动引导类、客户端代理、服务端协调、Future 管理       |
-| `netty-rpc-examples`       | 演示案例（基于 `@RpcService` 与 `@RpcReference` 注解）|
+| `netty-rpc-common`         | 公共模型、自定义注解、全局异常定义等共享数据源        |
+| `netty-rpc-api`            | 核心 SPI 扩展接口定义（解耦技术实现依赖）              |
+| `netty-rpc-core`           | RPC 引擎基座（Netty 通信、动态代理、反射调用与组装）  |
+| `netty-rpc-registry-zk`    | 基于 ZK Curator 的服务注册与发现插件实现             |
+| `netty-rpc-examples`       | 演示案例                                      |
 
 ## 设计模式
 
@@ -98,7 +100,8 @@ mvn clean test jacoco:report
 
 | 模块            | 覆盖率 | 测试数 |
 |----------------|-------|-------|
-| Domain         | 92%   | 21    |
-| Infrastructure | >85%  | 48    |
-| Application    | >85%  | 22    |
-| **总计**        | **>80%** | **91** |
+| Common         | 92%   | 21    |
+| API            | 100%  | 0     |
+| Core           | >85%  | 40    |
+| Registry(ZK)   | >85%  | 2     |
+| **总计**        | **>80%** | **63** |

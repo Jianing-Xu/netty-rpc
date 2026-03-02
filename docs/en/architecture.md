@@ -4,7 +4,7 @@
 
 ## 1. Project Overview
 
-`netty-rpc` is an enterprise-grade RPC framework built on Java 17, Netty 4.1.x, and ZooKeeper. The project adopts a **DDD (Domain-Driven Design) Layered Architecture** and uses **TDD (Test-Driven Development)**, covering core RPC components: communication protocols, codecs, service registry/discovery, proxied invocation, load balancing, and fault tolerance via timeouts.
+`netty-rpc` is an enterprise-grade RPC framework built on Java 17, Netty 4.1.x, and ZooKeeper. The project adopts a **Microkernel Architecture (Core Engine + SPI Plugins)** and uses **TDD (Test-Driven Development)**, covering core RPC components: communication protocols, codecs, service registry/discovery, proxied invocation, load balancing, and fault tolerance via timeouts.
 
 ---
 
@@ -25,13 +25,12 @@
 
 ## 3. Architecture Design
 
-### 3.1 DDD Layered Architecture
+### 3.1 Microkernel Architecture (Core + SPI)
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Application Layer                            │
-│  Responsibilities: Use case orchestration, proxies, transports  │
-│  Dependencies: Domain + Infrastructure                          │
+│                    netty-rpc-core (Core Engine)                 │
+│  Responsibilities: Bootstrapping, proxies, transports, futures  │
 │                                                                 │
 │  ┌─────────────┐ ┌──────────────┐ ┌──────────────────┐          │
 │  │RpcBootstrap │ │ NettyClient  │ │  RpcServer        │         │
@@ -39,28 +38,31 @@
 │  └──────┬──────┘ └──────┬───────┘ └───────┬──────────┘          │
 │         │               │                 │                     │
 │  ┌──────┴──────┐ ┌──────┴───────┐ ┌───────┴──────────┐         │
-│  │PendingReqs  │ │RpcClientHdlr │ │RpcServerHandler   │        │
-│  │ (Futures)   │ │ (Responses)  │ │ (Reflection + TP) │        │
+│  │PendingReqs  │ │RpcClientProxy│ │RpcServerHandler   │        │
+│  │ (Futures)   │ │ (Invocation) │ │ (Reflection + TP) │        │
 │  └─────────────┘ └──────────────┘ └──────────────────┘          │
 ├─────────────────────────────────────────────────────────────────┤
-│                   Infrastructure Layer                          │
-│  Responsibilities: Concrete technological implementations         │
-│  Dependencies: Domain                                           │
+│                   netty-rpc-api (SPI Interfaces)                │
+│  Responsibilities: Pure technology contracts decoupling domains │
 │                                                                 │
 │  ┌─────────────┐ ┌────────────────┐ ┌──────────────────┐      │
-│  │ RpcEncoder   │ │ JdkSerializer   │ │ZkServiceRegistry │      │
-│  │ RpcDecoder   │ │ ProtobufSerializer│ │ZkServiceDiscovery│      │
+│  │ Serializer   │ │ LoadBalancer   │ │ServiceRegistry    │      │
+│  │             │ │                │ │ServiceDiscovery   │      │
 │  └─────────────┘ └────────────────┘ └──────────────────┘      │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │ RandomLB / RoundRobinLB / ConsistentHashLoadBalancer    │    │
-│  └─────────────────────────────────────────────────────────┘    │
 ├─────────────────────────────────────────────────────────────────┤
-│                      Domain Layer                               │
-│  Responsibilities: Pure business rules, contracts, zero tech   │
+│                   Plugin Implementations                        │
+│  Responsibilities: Pluggable technical implementations          │
+│                                                                 │
+│  [netty-rpc-registry-zk]     -> Curator + ZooKeeper bindings    │
+│  [netty-rpc-core built-ins]  -> Netty Codecs, Protostuff logic  │
+├─────────────────────────────────────────────────────────────────┤
+│                      netty-rpc-common                           │
+│  Responsibilities: Base models, exceptions, shareable network   │
+│                    constants.                                   │
 │                                                                 │
 │  Models:  RpcRequest, RpcResponse, RpcMessage, Header          │
 │  Enums:   MessageType, SerializationType, ProtocolConstants     │
-│  Ifaces:  Serializer, LoadBalancer, Registry, Discovery         │
+│  Annots:  @RpcService, @RpcReference                            │
 │  Except:  RpcException                                          │
 └─────────────────────────────────────────────────────────────────┘
 ```

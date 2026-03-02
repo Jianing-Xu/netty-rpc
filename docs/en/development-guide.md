@@ -20,27 +20,30 @@
 netty-rpc/
 ├── pom.xml                              # Parent POM (Dependency management + JaCoCo)
 │
-├── netty-rpc-domain/                    # Domain Layer (No external dependencies)
-│   └── src/main/java/com/xujn/nettyrpc/domain/
+├── netty-rpc-common/                    # Common Layer (Shared data)
+│   └── src/main/java/com/xujn/nettyrpc/common/
 │       ├── model/                       # Requests, Responses, Protocols, Contexts
-│       ├── protocol/                    # Serializer (I)
-│       ├── registry/                    # Registry/Discovery (I)
-│       ├── loadbalance/                 # LoadBalancer (I)
 │       ├── annotation/                  # @RpcService, @RpcReference
 │       └── exception/                   # Exceptions
 │
-├── netty-rpc-infrastructure/            # Infrastructure Layer (Depends on Domain + Netty + ZK)
-│   └── src/main/java/com/xujn/nettyrpc/infrastructure/
-│       ├── serialization/               # JdkSerializer, ProtobufSerializer
-│       ├── codec/                       # RpcEncoder, RpcDecoder
-│       ├── registry/                    # ZK implementations
-│       └── loadbalance/                 # Random, RoundRobin, ConsistentHash
+├── netty-rpc-api/                       # SPI Interfaces Layer (No dependencies)
+│   └── src/main/java/com/xujn/nettyrpc/api/
+│       ├── serialization/               # Serializer (I)
+│       ├── registry/                    # Registry/Discovery (I)
+│       └── loadbalance/                 # LoadBalancer (I)
 │
-├── netty-rpc-application/               # Application Layer (Depends on Domain + Infra)
-│   └── src/main/java/com/xujn/nettyrpc/application/
+├── netty-rpc-core/                      # Core Execution Engine
+│   └── src/main/java/com/xujn/nettyrpc/core/
+│       ├── bootstrap/                   # RpcBootstrap annotations engine
 │       ├── client/                      # Proxies, Request Management
 │       ├── server/                      # Server binding, Request routing
-│       └── bootstrap/                   # RpcBootstrap annotations engine
+│       ├── codec/                       # RpcEncoder, RpcDecoder
+│       ├── serialization/               # JdkSerializer, ProtobufSerializer
+│       └── loadbalance/                 # Random, RoundRobin, ConsistentHash
+│
+├── netty-rpc-registry-zk/               # SPI Plugin: ZooKeeper
+│   └── src/main/java/com/xujn/nettyrpc/registry/zk/
+│       └── ZkServiceRegistry, ZkServiceDiscovery
 │
 ├── netty-rpc-examples/                  # Example Layer
 │   └── src/main/java/com/xujn/nettyrpc/examples/
@@ -68,9 +71,9 @@ mvn clean install
 mvn clean test
 
 # specifically targeting a module
-mvn clean test -pl netty-rpc-domain
-mvn clean test -pl netty-rpc-infrastructure -am
-mvn clean test -pl netty-rpc-application -am
+mvn clean test -pl netty-rpc-common
+mvn clean test -pl netty-rpc-core -am
+mvn clean test -pl netty-rpc-registry-zk -am
 ```
 
 ### 3.3 Coverage Reports
@@ -104,11 +107,11 @@ This project adheres to the Red-Green-Refactor loop:
 
 | Layer | Method | Example |
 |-------|--------|---------|
-| Domain | Pure Unit Tests | `RpcRequestTest` (verifying constructors/equality) |
-| Infrastructure | Component Tests | `RpcCodecTest` (using `EmbeddedChannel`) |
-| Infrastructure | Integration Tests | `ZkRegistryTest` (using Curator `TestingServer`) |
-| Application | Unit Tests | `RpcServerHandlerTest` (verifying reflections) |
-| Application | End-to-End Tests | `IntegrationTest` (firing full Client → Protocol → Node → Client loops) |
+| Common | Pure Unit Tests | `RpcRequestTest` (verifying constructors/equality) |
+| Core | Component Tests | `RpcCodecTest` (using `EmbeddedChannel`) |
+| Registry | Integration Tests | `ZkRegistryTest` (using Curator `TestingServer`) |
+| Core | Unit Tests | `RpcServerHandlerTest` (verifying reflections) |
+| Core | End-to-End Tests | `IntegrationTest` (firing full Client → Protocol → Node → Client loops) |
 
 ---
 
@@ -116,10 +119,10 @@ This project adheres to the Red-Green-Refactor loop:
 
 ### 5.1 Adding a New Serializer
 
-1. Implement `Serializer` in `netty-rpc-infrastructure`:
+1. Implement `Serializer` in `netty-rpc-core` (or a newly created plugin module):
 
 ```java
-package com.xujn.nettyrpc.infrastructure.serialization;
+package com.xujn.nettyrpc.core.serialization;
 
 public class GsonSerializer implements Serializer {
     @Override
