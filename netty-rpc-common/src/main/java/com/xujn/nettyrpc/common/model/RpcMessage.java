@@ -28,7 +28,8 @@ public class RpcMessage {
                 SerializationType.JDK.getCode(),
                 (byte) 0,
                 request.getRequestId(),
-                0  // bodyLength will be set by encoder after serialization
+                0, // bodyLength will be set by encoder after serialization
+                0  // crc32 will be set by encoder after serialization
         );
         return new RpcMessage(header, request);
     }
@@ -44,7 +45,8 @@ public class RpcMessage {
                 SerializationType.JDK.getCode(),
                 response.getStatus(),
                 response.getRequestId(),
-                0
+                0, // bodyLength
+                0  // crc32
         );
         return new RpcMessage(header, response);
     }

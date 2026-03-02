@@ -13,9 +13,9 @@ public final class ProtocolConstants {
 
     /**
      * Fixed header length in bytes.
-     * Layout: Magic(2) + Version(1) + MsgType(1) + SerType(1) + Status(1) + RequestId(8) + BodyLen(4) = 18
+     * Layout: Magic(2) + Version(1) + MsgType(1) + SerType(1) + Status(1) + RequestId(8) + BodyLen(4) + CRC32(4) = 22
      */
-    public static final int HEADER_LENGTH = 18;
+    public static final int HEADER_LENGTH = 22;
 
     private ProtocolConstants() {
         throw new UnsupportedOperationException("Constants class");

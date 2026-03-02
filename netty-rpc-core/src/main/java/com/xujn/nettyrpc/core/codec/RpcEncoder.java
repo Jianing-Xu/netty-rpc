@@ -6,11 +6,13 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
 
+import java.util.zip.CRC32;
+
 /**
  * Encodes an {@link RpcMessage} into the custom binary protocol frame.
  *
- * Frame layout (18-byte header + variable body):
- * | Magic(2) | Version(1) | MsgType(1) | SerType(1) | Status(1) | RequestId(8) | BodyLen(4) | Body(N) |
+ * Frame layout (22-byte header + variable body):
+ * | Magic(2) | Version(1) | MsgType(1) | SerType(1) | Status(1) | RequestId(8) | BodyLen(4) | CRC32(4) | Body(N) |
  */
 public class RpcEncoder extends MessageToByteEncoder<RpcMessage> {
 
@@ -25,6 +27,10 @@ public class RpcEncoder extends MessageToByteEncoder<RpcMessage> {
         var header = msg.getHeader();
         byte[] bodyBytes = serializer.serialize(msg.getBody());
 
+        CRC32 crc = new CRC32();
+        crc.update(bodyBytes);
+        int crcValue = (int) crc.getValue();
+
         out.writeShort(header.getMagic());
         out.writeByte(header.getVersion());
         out.writeByte(header.getMessageType());
@@ -32,6 +38,7 @@ public class RpcEncoder extends MessageToByteEncoder<RpcMessage> {
         out.writeByte(header.getStatus());
         out.writeLong(header.getRequestId());
         out.writeInt(bodyBytes.length);
+        out.writeInt(crcValue);
         out.writeBytes(bodyBytes);
     }
 }

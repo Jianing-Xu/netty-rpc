@@ -126,11 +126,11 @@ ZooKeeper Tree:
 ### 4.1 Frame Structure
 
 ```text
-+--------+--------+--------+--------+--------+--------+----------+---------+---------+
-| Magic  |Version | MsgType| SerType| Status |      RequestId     | BodyLen |  Body   |
-| 2 Byte | 1 Byte | 1 Byte | 1 Byte | 1 Byte |     8 Bytes       | 4 Bytes | N Bytes |
-+--------+--------+--------+--------+--------+--------------------+---------+---------+
-|<--------------------- Header (18 Bytes) --------------------------------->|< Body  >|
++--------+--------+--------+--------+--------+--------+----------+---------+---------+---------+
+| Magic  |Version | MsgType| SerType| Status |      RequestId     | BodyLen |  CRC32  |  Body   |
+| 2 Byte | 1 Byte | 1 Byte | 1 Byte | 1 Byte |     8 Bytes       | 4 Bytes | 4 Bytes | N Bytes |
++--------+--------+--------+--------+--------+--------------------+---------+---------+---------+
+|<--------------------- Header (22 Bytes) ----------------------------------------->|< Body  >|
 ```
 
 ### 4.2 Field Definitions
@@ -144,13 +144,14 @@ ZooKeeper Tree:
 | Status | 1 | byte | Response status (0=Success, 1=Exception). |
 | RequestId | 8 | long | Unique ID linking asynchronous requests and responses. |
 | BodyLen | 4 | int | Length of the serialized body array. |
+| CRC32 | 4 | int | CRC-32 checksum of the body array to verify data integrity. |
 | Body | N | bytes | Serialized `RpcRequest` or `RpcResponse`. |
 
 ### 4.3 TCP Packet Handling
 
 `RpcDecoder` addresses TCP fragmentation via:
 
-1. **Header validation**: Wait until at least 18 readable bytes are present.
+1. **Header validation**: Wait until at least 22 readable bytes are present.
 2. **Mark/Reset**: Use `markReaderIndex()`. Read the header. If the body length isn't fully available, invoke `resetReaderIndex()` and exit.
 3. **Magic Check**: If bounds exist but magic number != `0xCAFE`, close connection instantly.
 

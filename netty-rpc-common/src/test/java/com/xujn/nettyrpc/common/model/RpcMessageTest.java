@@ -86,7 +86,7 @@ class RpcMessageTest {
     void testProtocolConstants() {
         assertEquals((short) 0xCAFE, ProtocolConstants.MAGIC_NUMBER);
         assertEquals((byte) 1, ProtocolConstants.VERSION);
-        assertEquals(18, ProtocolConstants.HEADER_LENGTH);
+        assertEquals(22, ProtocolConstants.HEADER_LENGTH);
         assertThrows(InvocationTargetException.class, () -> {
             var ctor = ProtocolConstants.class.getDeclaredConstructor();
             ctor.setAccessible(true);
@@ -97,7 +97,7 @@ class RpcMessageTest {
     @Test
     void testProtocolHeaderToString() {
         RpcProtocolHeader header = new RpcProtocolHeader(
-                (short) 0xCAFE, (byte) 1, (byte) 0, (byte) 0, (byte) 0, 100L, 256);
+                (short) 0xCAFE, (byte) 1, (byte) 0, (byte) 0, (byte) 0, 100L, 256, 123456);
         String str = header.toString();
         assertTrue(str.contains("cafe"));
         assertTrue(str.contains("100"));

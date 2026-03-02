@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.zip.CRC32;
 
 /**
  * Decodes the custom binary protocol frame back into an {@link RpcMessage}.
@@ -48,6 +49,7 @@ public class RpcDecoder extends ByteToMessageDecoder {
         byte status = in.readByte();
         long requestId = in.readLong();
         int bodyLength = in.readInt();
+        int expectedCrc = in.readInt();
 
         // Half-packet: body not fully received yet
         if (in.readableBytes() < bodyLength) {
@@ -58,11 +60,21 @@ public class RpcDecoder extends ByteToMessageDecoder {
         byte[] bodyBytes = new byte[bodyLength];
         in.readBytes(bodyBytes);
 
+        CRC32 crc = new CRC32();
+        crc.update(bodyBytes);
+        int actualCrc = (int) crc.getValue();
+
+        if (expectedCrc != actualCrc) {
+            in.resetReaderIndex(); // Optionally drop connection instead
+            throw new IllegalArgumentException(
+                    "CRC32 mismatch! Expected: " + expectedCrc + ", but got: " + actualCrc);
+        }
+
         Object body = serializer.deserialize(bodyBytes);
 
         RpcProtocolHeader header = new RpcProtocolHeader(
                 magic, version, messageType, serializationType,
-                status, requestId, bodyLength);
+                status, requestId, bodyLength, expectedCrc);
 
         RpcMessage message = new RpcMessage(header, body);
         out.add(message);
