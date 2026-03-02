@@ -24,9 +24,10 @@ public class RpcBeanPostProcessor implements BeanPostProcessor {
         RpcService rpcService = clazz.getAnnotation(RpcService.class);
         if (rpcService != null) {
             Class<?> serviceInterface = rpcService.value();
-            log.info("Spring Boot Starter scanning found @RpcService: {} -> {}", 
-                     serviceInterface.getName(), clazz.getName());
-            rpcBootstrap.addService(serviceInterface, bean);
+            int limit = rpcService.limit();
+            log.info("Spring Boot Starter scanning found @RpcService: {} -> {} (limit: {})", 
+                     serviceInterface.getName(), clazz.getName(), limit);
+            rpcBootstrap.addService(serviceInterface, bean, limit);
         }
 
         // Inject @RpcReference references into the bean fields

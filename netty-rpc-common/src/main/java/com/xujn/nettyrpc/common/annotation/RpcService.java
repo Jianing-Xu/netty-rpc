@@ -22,4 +22,9 @@ public @interface RpcService {
      * The service interface to expose.
      */
     Class<?> value();
+
+    /**
+     * Rate limit (Requests Per Second). 0 means no limit.
+     */
+    int limit() default 0;
 }

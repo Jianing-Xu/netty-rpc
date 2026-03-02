@@ -9,7 +9,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Proxy;
+import java.lang.reflect.Method;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -50,6 +52,12 @@ public class RpcClientProxy {
 
                     String serviceName = interfaceClass.getName();
                     int maxTries = retries + 1;
+                    
+                    boolean isAsync = CompletableFuture.class.isAssignableFrom(method.getReturnType());
+                    if (isAsync) {
+                        return sendAsyncWithRetry(serviceName, method, args, 1, maxTries);
+                    }
+
                     int tryCount = 0;
                     Throwable lastException = null;
 
@@ -102,5 +110,66 @@ public class RpcClientProxy {
                     throw new RpcException("RPC invocation failed after " + maxTries + " tries: " + lastException.getMessage(), lastException);
                 }
         );
+    }
+
+    private CompletableFuture<Object> sendAsyncWithRetry(String serviceName, Method method, Object[] args, int tryCount, int maxTries) {
+        CompletableFuture<Object> resultFuture = new CompletableFuture<>();
+        
+        try {
+            RpcRequest request = new RpcRequest(
+                    REQUEST_ID_GEN.incrementAndGet(),
+                    serviceName,
+                    method.getName(),
+                    method.getParameterTypes(),
+                    args
+            );
+
+            List<String> addresses = serviceDiscovery.discover(serviceName);
+            if (addresses == null || addresses.isEmpty()) {
+                throw new RpcException("No available servers for: " + serviceName);
+            }
+            String address = loadBalancer.select(addresses);
+            String[] parts = address.split(":");
+            String host = parts[0];
+            int port = Integer.parseInt(parts[1]);
+
+            log.debug("Sending async request {} to {}:{} (try {}/{})", 
+                      request.getRequestId(), host, port, tryCount, maxTries);
+
+            nettyClient.sendRequest(host, port, request)
+                    .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                    .whenComplete((response, ex) -> {
+                        if (ex != null) {
+                            handleAsyncFailure(serviceName, method, args, tryCount, maxTries, ex, resultFuture);
+                        } else if (!response.isSuccess()) {
+                            handleAsyncFailure(serviceName, method, args, tryCount, maxTries, new RpcException(response.getError()), resultFuture);
+                        } else {
+                            resultFuture.complete(response.getResult());
+                        }
+                    });
+        } catch (Exception e) {
+            handleAsyncFailure(serviceName, method, args, tryCount, maxTries, e, resultFuture);
+        }
+
+        return resultFuture;
+    }
+
+    private void handleAsyncFailure(String serviceName, Method method, Object[] args, 
+                                    int tryCount, int maxTries, Throwable ex, CompletableFuture<Object> resultFuture) {
+        if (tryCount < maxTries) {
+            log.warn("Async RPC invocation failed, retrying... (try {}/{}): {}", 
+                     tryCount, maxTries, ex.getMessage());
+            sendAsyncWithRetry(serviceName, method, args, tryCount + 1, maxTries)
+                    .whenComplete((res, nextEx) -> {
+                        if (nextEx != null) {
+                            resultFuture.completeExceptionally(nextEx);
+                        } else {
+                            resultFuture.complete(res);
+                        }
+                    });
+        } else {
+            log.error("Async RPC invocation failed after {} tries for service {}", maxTries, serviceName, ex);
+            resultFuture.completeExceptionally(new RpcException("RPC invocation failed after " + maxTries + " tries: " + ex.getMessage(), ex));
+        }
     }
 }

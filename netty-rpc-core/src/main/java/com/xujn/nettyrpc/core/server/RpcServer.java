@@ -2,6 +2,8 @@ package com.xujn.nettyrpc.core.server;
 
 import com.xujn.nettyrpc.api.serialization.Serializer;
 import com.xujn.nettyrpc.api.registry.ServiceRegistry;
+import com.xujn.nettyrpc.api.ratelimit.RateLimiter;
+import com.xujn.nettyrpc.core.ratelimit.TokenBucketRateLimiter;
 import com.xujn.nettyrpc.core.codec.RpcDecoder;
 import com.xujn.nettyrpc.core.codec.RpcEncoder;
 import io.netty.bootstrap.ServerBootstrap;
@@ -30,6 +32,7 @@ public class RpcServer {
     private final ServiceRegistry serviceRegistry;
     private final Serializer serializer;
     private final Map<String, Object> serviceMap = new HashMap<>();
+    private final Map<String, RateLimiter> rateLimiterMap = new HashMap<>();
     private Channel serverChannel;
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
@@ -45,8 +48,20 @@ public class RpcServer {
      * Register a local service bean for the given interface.
      */
     public void addService(String interfaceName, Object serviceBean) {
+        addService(interfaceName, serviceBean, 0);
+    }
+
+    /**
+     * Register a local service bean for the given interface with a rate limit.
+     */
+    public void addService(String interfaceName, Object serviceBean, int limit) {
         serviceMap.put(interfaceName, serviceBean);
-        log.info("Service registered locally: {}", interfaceName);
+        if (limit > 0) {
+            rateLimiterMap.put(interfaceName, new TokenBucketRateLimiter(limit, limit));
+            log.info("Service registered locally: {} (limit: {} QPS)", interfaceName, limit);
+        } else {
+            log.info("Service registered locally: {}", interfaceName);
+        }
     }
 
     /**
@@ -68,7 +83,7 @@ public class RpcServer {
                         ch.pipeline()
                                 .addLast(new RpcDecoder(serializer))
                                 .addLast(new RpcEncoder(serializer))
-                                .addLast(new RpcServerHandler(serviceMap));
+                                .addLast(new RpcServerHandler(serviceMap, rateLimiterMap));
                     }
                 });
 

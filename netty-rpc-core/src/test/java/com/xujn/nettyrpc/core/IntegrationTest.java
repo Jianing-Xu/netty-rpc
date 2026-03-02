@@ -25,6 +25,7 @@ class IntegrationTest {
     public interface HelloService {
         String sayHello(String name);
         int add(int a, int b);
+        java.util.concurrent.CompletableFuture<String> sayHelloAsync(String name);
     }
 
     public static class HelloServiceImpl implements HelloService {
@@ -35,6 +36,14 @@ class IntegrationTest {
         @Override
         public int add(int a, int b) {
             return a + b;
+        }
+        @Override
+        public java.util.concurrent.CompletableFuture<String> sayHelloAsync(String name) {
+            // Server simply returns the value, RPC framework client will wrap to future!
+            // Note: Currently, our reflection simply delegates to this method. 
+            // In a fully reactive server, this would run differently, but for testing
+            // we simulate a business method returning a CompletableFuture.
+            return java.util.concurrent.CompletableFuture.completedFuture("Hello Async, " + name + "!");
         }
     }
 
@@ -120,5 +129,18 @@ class IntegrationTest {
         for (int i = 0; i < 5; i++) {
             assertEquals("Hello, User" + i + "!", helloService.sayHello("User" + i));
         }
+    }
+
+    @Test
+    void testAsyncCall() throws Exception {
+        ServiceDiscovery discovery = new ZkServiceDiscovery(zkClient);
+        RpcClientProxy proxy = new RpcClientProxy(
+                discovery, new RoundRobinLoadBalancer(), nettyClient, 5000, 3);
+
+        HelloService helloService = proxy.create(HelloService.class);
+
+        java.util.concurrent.CompletableFuture<String> future = helloService.sayHelloAsync("Netty Async");
+        String result = future.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        assertEquals("Hello Async, Netty Async!", result);
     }
 }

@@ -59,6 +59,7 @@ public class RpcBootstrap {
     private RpcServer rpcServer;
     private NettyClient nettyClient;
     private final Map<String, Object> registeredServices = new HashMap<>();
+    private final Map<String, Integer> serviceLimits = new HashMap<>();
 
     private RpcBootstrap(Builder builder) {
         this.serializer = builder.serializer;
@@ -78,10 +79,11 @@ public class RpcBootstrap {
             RpcService annotation = clazz.getAnnotation(RpcService.class);
             if (annotation != null) {
                 Class<?> serviceInterface = annotation.value();
+                int limit = annotation.limit();
                 try {
                     Object instance = clazz.getDeclaredConstructor().newInstance();
-                    registeredServices.put(serviceInterface.getName(), instance);
-                    log.info("Scanned @RpcService: {} -> {}", serviceInterface.getName(), clazz.getName());
+                    addService(serviceInterface, instance, limit);
+                    log.info("Scanned @RpcService: {} -> {} (limit: {})", serviceInterface.getName(), clazz.getName(), limit);
                 } catch (Exception e) {
                     log.error("Failed to instantiate @RpcService: {}", clazz.getName(), e);
                 }
@@ -93,7 +95,15 @@ public class RpcBootstrap {
      * Register a service bean directly (without scanning).
      */
     public void addService(Class<?> serviceInterface, Object serviceBean) {
+        addService(serviceInterface, serviceBean, 0);
+    }
+
+    /**
+     * Register a service bean directly with a rate limit.
+     */
+    public void addService(Class<?> serviceInterface, Object serviceBean, int limit) {
         registeredServices.put(serviceInterface.getName(), serviceBean);
+        serviceLimits.put(serviceInterface.getName(), limit);
     }
 
     /**
@@ -105,7 +115,8 @@ public class RpcBootstrap {
         }
         rpcServer = new RpcServer(host, port, registry, serializer);
         for (Map.Entry<String, Object> entry : registeredServices.entrySet()) {
-            rpcServer.addService(entry.getKey(), entry.getValue());
+            int limit = serviceLimits.getOrDefault(entry.getKey(), 0);
+            rpcServer.addService(entry.getKey(), entry.getValue(), limit);
         }
         rpcServer.start();
     }
