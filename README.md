@@ -1,18 +1,21 @@
 # netty-rpc
 
-基于 Java 17、Netty 4.1.x 与 ZooKeeper 的轻量级高性能 RPC 框架。采用 DDD 分层架构，TDD 驱动开发，全模块测试覆盖率 >80%。
+[中文文档](README_zh.md)
 
-## 架构
+A lightweight, high-performance RPC framework based on Java 17, Netty 4.1.x, and ZooKeeper. Built with Domain-Driven Design (DDD) layering and Test-Driven Development (TDD) principles, boasting >80% test coverage across all modules.
 
-```
+## Architecture
+
+```text
 ┌──────────────────────────────────────────────────────────────────────┐
 │                     netty-rpc-application                           │
+│  RpcBootstrap (@RpcService / @RpcReference)                         │
 │  RpcClientProxy ←→ NettyClient ←→ PendingRequests                   │
-│  RpcServer ←→ RpcServerHandler (反射调用 + 业务线程池隔离)            │
+│  RpcServer ←→ RpcServerHandler (Reflection + Business Thread Pool)  │
 ├──────────────────────────────────────────────────────────────────────┤
 │                    netty-rpc-infrastructure                         │
-│  RpcEncoder/Decoder   JdkSerializer   ZkServiceRegistry/Discovery   │
-│  RandomLoadBalancer   RoundRobinLoadBalancer                        │
+│  RpcEncoder/Decoder   Jdk/ProtobufSerializer   ZkRegistry/Discovery │
+│  Random/RoundRobin/ConsistentHash LoadBalancer                      │
 ├──────────────────────────────────────────────────────────────────────┤
 │                       netty-rpc-domain                              │
 │  RpcRequest/Response  RpcMessage  ProtocolConstants  MessageType     │
@@ -20,81 +23,82 @@
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-## 技术栈
+## Tech Stack
 
-| 组件        | 技术               | 版本           |
-|------------|-------------------|---------------|
-| 网络通信    | Netty             | 4.1.108.Final |
-| 注册中心    | ZooKeeper/Curator | 5.5.0         |
-| 序列化      | JDK Native        | -             |
-| 构建工具    | Maven             | 3.x           |
-| 测试框架    | JUnit 5 + Mockito | 5.10.2        |
-| 覆盖率      | JaCoCo            | 0.8.11        |
+| Component         | Technology         | Version       |
+|------------------|-------------------|---------------|
+| Network Comm     | Netty             | 4.1.108.Final |
+| Service Registry | ZooKeeper/Curator | 5.5.0         |
+| Serialization    | Protostuff        | 1.8.0         |
+| Build Tool       | Maven             | 3.x           |
+| Testing          | JUnit 5 + Mockito | 5.10.2        |
+| Coverage         | JaCoCo            | 0.8.11        |
 
-## 自定义协议
+## Custom Protocol
 
-18 字节固定头部 + 变长消息体：
+18-byte fixed header + variable length body:
 
-```
+```text
 | Magic(2) | Version(1) | MsgType(1) | SerType(1) | Status(1) | RequestId(8) | BodyLen(4) | Body(N) |
 ```
 
-- **Magic**: `0xCAFE`，用于帧校验
+- **Magic**: `0xCAFE`, for filtering invalid frames.
 - **MsgType**: 0=Request, 1=Response, 2=Heartbeat
-- **Status**: 0=成功, 1=异常
+- **Status**: 0=Success, 1=Exception
 
-## RPC 调用流程
+## RPC Invocation Flow
 
-1. 客户端通过 `RpcClientProxy` 生成 JDK 动态代理
-2. 代理拦截方法调用，封装为 `RpcRequest`
-3. `ServiceDiscovery` 从 ZooKeeper 获取可用地址
-4. `LoadBalancer` 选择目标节点
-5. `NettyClient` 通过自定义协议编码发送，`PendingRequests` 注册 `CompletableFuture`
-6. 服务端 `RpcDecoder` 解码，`RpcServerHandler` 在业务线程池中反射调用
-7. 响应经 `RpcEncoder` 编码返回客户端
-8. 客户端 `RpcClientHandler` 根据 `requestId` 完成对应 Future
+1. Client generates a JDK dynamic proxy via `RpcClientProxy`.
+2. The proxy intercepts the method call and encapsulates it into an `RpcRequest`.
+3. `ServiceDiscovery` retrieves available addresses from ZooKeeper.
+4. `LoadBalancer` selects the target host:port.
+5. `NettyClient` encodes and sends via custom protocol; `PendingRequests` registers a `CompletableFuture`.
+6. Server decodes the message, and `RpcServerHandler` invokes the method via reflection using isolated business threads.
+7. Response is encoded by `RpcEncoder` and returned to the client.
+8. Client `RpcClientHandler` completes the corresponding Future based on the `requestId`.
 
-## 快速开始
+## Quick Start
 
-### 前置条件
+### Prerequisites
 
 - Java 17+
 - Maven 3.x
-- ZooKeeper（可通过 Docker 启动: `docker start dev-zookeeper`）
+- ZooKeeper (Docker: `docker start dev-zookeeper` on port 2181)
 
-### 构建 & 测试
+### Build & Test
 
 ```bash
 mvn clean test
 ```
 
-### 覆盖率报告
+### Coverage Report
 
 ```bash
 mvn clean test jacoco:report
-# 报告位于 {module}/target/site/jacoco/index.html
+# Reports generated at {module}/target/site/jacoco/index.html
 ```
 
-## 模块说明
+## Modules
 
-| 模块                        | 职责                                           |
-|----------------------------|----------------------------------------------|
-| `netty-rpc-domain`         | 核心模型、接口、异常定义（无外部依赖）              |
-| `netty-rpc-infrastructure` | Netty 编解码器、ZK 注册发现、序列化、负载均衡实现    |
-| `netty-rpc-application`    | RPC 服务端/客户端协调、代理、Future 管理、集成测试    |
+| Module                      | Responsibility |
+|-----------------------------|----------------|
+| `netty-rpc-domain`         | Core models, interfaces, exception definitions (No external dependencies) |
+| `netty-rpc-infrastructure` | Netty codecs, ZK registry, serialization, load balancing implementations |
+| `netty-rpc-application`    | Bootstrap, client proxy, server coordination, Future management |
+| `netty-rpc-examples`       | Demo examples using `@RpcService` and `@RpcReference` |
 
-## 设计模式
+## Design Patterns
 
-- **动态代理模式**: `RpcClientProxy` — 透明化远程调用
-- **策略模式**: `LoadBalancer` — 可插拔的负载均衡策略
-- **责任链模式**: Netty `ChannelPipeline` — 编解码与业务处理链式解耦
-- **工厂方法模式**: `RpcMessage.buildRequest/buildResponse` — 封装消息构造
+- **Dynamic Proxy**: `RpcClientProxy` — transparent remote invocation.
+- **Strategy**: `LoadBalancer` — pluggable routing algorithms.
+- **Chain of Responsibility**: Netty `ChannelPipeline` — decoupling coding and business logic.
+- **Factory Method**: `RpcMessage.buildRequest/buildResponse` — consistent message construction.
 
-## 测试覆盖率
+## Test Coverage
 
-| 模块            | 覆盖率 | 测试数 |
-|----------------|-------|-------|
-| Domain         | 92%   | 21    |
-| Infrastructure | 83%   | 33    |
-| Application    | 87%   | 16    |
-| **总计**        | **>80%** | **70** |
+| Module         | Coverage | Tests |
+|---------------|---------|-------|
+| Domain        | 92%     | 21    |
+| Infrastructure| >85%    | 48    |
+| Application   | >85%    | 22    |
+| **Total**     | **>80%**| **91**|

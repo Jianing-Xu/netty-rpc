@@ -1,5 +1,7 @@
 # 开发指南
 
+[English Document](../en/development-guide.md)
+
 ## 1. 环境要求
 
 | 依赖 | 版本要求 |
@@ -114,11 +116,11 @@ mvn clean test -Djacoco.skip=true
 ```java
 package com.xujn.nettyrpc.infrastructure.serialization;
 
-public class ProtobufSerializer implements Serializer {
+public class GsonSerializer implements Serializer {
     @Override
-    public byte[] serialize(Object obj) { /* ... */ }
+    public byte[] serialize(Object obj) { /* Gson logic */ }
     @Override
-    public Object deserialize(byte[] data) { /* ... */ }
+    public Object deserialize(byte[] data) { /* Gson logic */ }
 }
 ```
 
@@ -130,9 +132,9 @@ public class ProtobufSerializer implements Serializer {
 1. 实现 `LoadBalancer` 接口：
 
 ```java
-public class ConsistentHashLoadBalancer implements LoadBalancer {
+public class WeightedRandomLoadBalancer implements LoadBalancer {
     @Override
-    public String select(List<String> serviceAddresses) { /* ... */ }
+    public String select(List<String> serviceAddresses) { /* 权重逻辑 */ }
 }
 ```
 
@@ -150,10 +152,10 @@ public class ConsistentHashLoadBalancer implements LoadBalancer {
 
 | 决策 | 当前方案 | 取舍原因 |
 |------|---------|---------|
-| 序列化 | JDK 原生 | 不引入额外依赖，`Serializer` 接口已预留扩展 |
+| 序列化 | Protostuff (Protobuf) | 高性能、小体积，兼容原 JDK 序列化（已实现双端支持） |
 | 连接管理 | 简单 Channel 缓存 | 复杂连接池在初版不必要，`Map<address, Channel>` 已满足 |
 | 服务发现 | 每次直连 ZK | 高频场景需加本地缓存；`ServiceDiscovery` 接口已隔离 |
-| 无 Spring | 手动 addService | SPI / 注解扫描是后续演进方向 |
+| 注册注入 | 注解扫描 `@RpcService` | 通过 `RpcBootstrap` 实现了包扫描与代理注入，大幅度提升了易用性 |
 
 ### 6.2 演进方向
 
@@ -165,4 +167,3 @@ public class ConsistentHashLoadBalancer implements LoadBalancer {
 | 重试机制 | 在 `RpcClientProxy` 中增加可配置的重试策略 |
 | SPI 扩展 | 使用 `ServiceLoader` 自动发现序列化器、负载均衡器实现 |
 | 异步 RPC | 返回 `CompletableFuture<T>` 而非同步阻塞 |
-| 注解驱动 | 自定义 `@RpcService` 注解实现服务自动注册 |

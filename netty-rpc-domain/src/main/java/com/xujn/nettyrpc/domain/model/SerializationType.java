@@ -5,7 +5,8 @@ package com.xujn.nettyrpc.domain.model;
  */
 public enum SerializationType {
 
-    JDK((byte) 0);
+    JDK((byte) 0),
+    PROTOBUF((byte) 1);
 
     private final byte code;
 

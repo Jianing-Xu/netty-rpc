@@ -8,7 +8,7 @@ import com.xujn.nettyrpc.domain.registry.ServiceRegistry;
 import com.xujn.nettyrpc.infrastructure.loadbalance.RoundRobinLoadBalancer;
 import com.xujn.nettyrpc.infrastructure.registry.ZkServiceDiscovery;
 import com.xujn.nettyrpc.infrastructure.registry.ZkServiceRegistry;
-import com.xujn.nettyrpc.infrastructure.serialization.JdkSerializer;
+import com.xujn.nettyrpc.infrastructure.serialization.ProtobufSerializer;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
@@ -62,7 +62,7 @@ class IntegrationTest {
                 .build();
         zkClient.start();
 
-        var serializer = new JdkSerializer();
+        var serializer = new ProtobufSerializer();
         ServiceRegistry registry = new ZkServiceRegistry(zkClient);
 
         rpcServer = new RpcServer("127.0.0.1", 18888, registry, serializer);

@@ -15,6 +15,7 @@
         <module>netty-rpc-domain</module>
         <module>netty-rpc-infrastructure</module>
         <module>netty-rpc-application</module>
+        <module>netty-rpc-examples</module>
     </modules>
 
     <properties>
@@ -29,6 +30,7 @@
         <junit.version>5.10.2</junit.version>
         <mockito.version>5.11.0</mockito.version>
         <jacoco.version>0.8.11</jacoco.version>
+        <protostuff.version>1.8.0</protostuff.version>
     </properties>
 
     <dependencyManagement>
@@ -44,12 +46,34 @@
                 <artifactId>netty-rpc-infrastructure</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.xujn</groupId>
+                <artifactId>netty-rpc-application</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.xujn</groupId>
+                <artifactId>netty-rpc-examples</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <!-- Netty -->
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-all</artifactId>
                 <version>${netty.version}</version>
+            </dependency>
+
+            <!-- Protostuff (Protobuf-compatible serialization) -->
+            <dependency>
+                <groupId>io.protostuff</groupId>
+                <artifactId>protostuff-core</artifactId>
+                <version>${protostuff.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.protostuff</groupId>
+                <artifactId>protostuff-runtime</artifactId>
+                <version>${protostuff.version}</version>
             </dependency>
 
             <!-- Curator (ZooKeeper client) -->
@@ -191,6 +215,35 @@
                                 </rule>
                             </rules>
                         </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.3.0</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.6.3</version>
+                <configuration>
+                    <doclint>none</doclint>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>

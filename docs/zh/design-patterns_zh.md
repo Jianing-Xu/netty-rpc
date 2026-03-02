@@ -1,5 +1,7 @@
 # 设计模式说明
 
+[English Document](../en/design-patterns.md)
+
 ## 1. 动态代理模式 (Proxy Pattern)
 
 **使用位置**: `RpcClientProxy`

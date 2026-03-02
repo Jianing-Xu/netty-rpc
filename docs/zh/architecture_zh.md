@@ -1,5 +1,7 @@
 # 架构与设计文档
 
+[English Document](../en/architecture.md)
+
 ## 1. 项目概述
 
 `netty-rpc` 是一个基于 Java 17、Netty 4.1.x 与 ZooKeeper 构建的工程级 RPC 框架。项目采用 **DDD 分层架构** 和 **TDD 驱动开发**，覆盖了 RPC 框架的核心组成部分：通信协议、编解码、服务注册发现、代理调用、负载均衡、超时容错。
@@ -45,13 +47,13 @@
 │  职责：技术实现、外部系统适配                                     │
 │  依赖：Domain                                                   │
 │                                                                 │
-│  ┌─────────────┐ ┌───────────────┐ ┌──────────────────┐        │
-│  │ RpcEncoder   │ │ JdkSerializer │ │ZkServiceRegistry │        │
-│  │ RpcDecoder   │ │               │ │ZkServiceDiscovery│        │
-│  └─────────────┘ └───────────────┘ └──────────────────┘        │
-│  ┌─────────────────────────────┐                                │
-│  │RandomLB / RoundRobinLB      │                                │
-│  └─────────────────────────────┘                                │
+│  ┌─────────────┐ ┌────────────────┐ ┌──────────────────┐      │
+│  │ RpcEncoder   │ │ JdkSerializer   │ │ZkServiceRegistry │      │
+│  │ RpcDecoder   │ │ ProtobufSerializer│ │ZkServiceDiscovery│      │
+│  └─────────────┘ └────────────────┘ └──────────────────┘      │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │ RandomLB / RoundRobinLB / ConsistentHashLoadBalancer    │    │
+│  └─────────────────────────────────────────────────────────┘    │
 ├─────────────────────────────────────────────────────────────────┤
 │                      Domain Layer                               │
 │  职责：纯业务规则、接口契约、无技术依赖                            │
@@ -136,7 +138,7 @@ ZooKeeper 节点结构:
 | Magic | 2 | short | 魔数 `0xCAFE`，用于过滤非法请求 |
 | Version | 1 | byte | 协议版本号（当前为 1），保证向后兼容 |
 | MsgType | 1 | byte | 0=Request, 1=Response, 2=Heartbeat |
-| SerType | 1 | byte | 序列化类型（0=JDK），预留扩展位 |
+| SerType | 1 | byte | 序列化类型（0=JDK, 1=Protobuf），预留扩展位 |
 | Status | 1 | byte | 响应状态：0=成功, 1=异常 |
 | RequestId | 8 | long | 请求唯一标识，用于关联请求与响应 |
 | BodyLen | 4 | int | 消息体字节长度 |
@@ -209,5 +211,6 @@ bizThreadPool.submit(() -> {
 |------|------|------|
 | Random | `RandomLoadBalancer` | `ThreadLocalRandom.nextInt(size)` |
 | RoundRobin | `RoundRobinLoadBalancer` | `AtomicInteger` 原子自增取模，溢出安全 (`& Integer.MAX_VALUE`) |
+| ConsistentHash | `ConsistentHashLoadBalancer` | 基于虚拟节点 (160个副本) 和 FNV1a_32 算法建立哈希环 |
 
-两者均实现 `LoadBalancer` 接口，通过构造注入替换策略。
+以上均实现 `LoadBalancer` 接口，通过构造注入或 Bootstrap 设置替换策略。

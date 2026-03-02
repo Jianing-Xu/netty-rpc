@@ -1,5 +1,7 @@
 # 使用指南
 
+[English Document](../en/usage-guide.md)
+
 ## 1. 快速开始
 
 ### 1.1 前置条件
@@ -34,11 +36,15 @@ public interface HelloService {
 
 ## 3. 实现服务（Provider 端）
 
+可使用 `@RpcService` 注解标记服务实现类：
+
 ```java
 package com.xujn.nettyrpc.example.provider;
 
 import com.xujn.nettyrpc.example.api.HelloService;
+import com.xujn.nettyrpc.domain.annotation.RpcService;
 
+@RpcService(HelloService.class)
 public class HelloServiceImpl implements HelloService {
     @Override
     public String sayHello(String name) {
@@ -56,73 +62,83 @@ public class HelloServiceImpl implements HelloService {
 
 ## 4. 启动服务端
 
+使用 `RpcBootstrap` 进行包扫描并全自动启动（默认使用 Protobuf 序列化）：
+
 ```java
 package com.xujn.nettyrpc.example.provider;
 
-import com.xujn.nettyrpc.application.server.RpcServer;
-import com.xujn.nettyrpc.example.api.HelloService;
+import com.xujn.nettyrpc.application.bootstrap.RpcBootstrap;
 import com.xujn.nettyrpc.infrastructure.registry.ZkServiceRegistry;
-import com.xujn.nettyrpc.infrastructure.serialization.JdkSerializer;
 
 public class ServerApp {
     public static void main(String[] args) throws Exception {
-        // 1. 初始化组件
-        var serializer = new JdkSerializer();
-        var registry = new ZkServiceRegistry("127.0.0.1:2181");
+        // 1. 初始化 Bootstrap
+        RpcBootstrap bootstrap = RpcBootstrap.builder()
+                .registry(new ZkServiceRegistry("127.0.0.1:2181"))
+                .host("127.0.0.1")
+                .port(8080)
+                .build();
 
-        // 2. 创建 RPC 服务器
-        var server = new RpcServer("127.0.0.1", 8080, registry, serializer);
+        // 2. 扫描带有 @RpcService 的包
+        bootstrap.scanServices("com.xujn.nettyrpc.example.provider");
 
-        // 3. 注册服务
-        server.addService(HelloService.class.getName(), new HelloServiceImpl());
-
-        // 4. 启动
-        server.start();
+        // 3. 启动
+        bootstrap.startServer();
         System.out.println("Server started on 127.0.0.1:8080");
 
-        // JVM 关闭钩子
-        Runtime.getRuntime().addShutdownHook(new Thread(server::shutdown));
+        // 4. 注册关闭钩子
+        Runtime.getRuntime().addShutdownHook(new Thread(bootstrap::shutdown));
     }
 }
 ```
+
+> **注**：也可不使用扫包，手动通过 `bootstrap.addService(HelloService.class, new HelloServiceImpl())` 注册。
 
 ---
 
 ## 5. 启动客户端
 
+使用 `@RpcReference` 注解自动注入代理对象，通过 `RpcBootstrap.injectReferences()` 完成注入：
+
 ```java
 package com.xujn.nettyrpc.example.consumer;
 
-import com.xujn.nettyrpc.application.client.NettyClient;
-import com.xujn.nettyrpc.application.client.RpcClientProxy;
+import com.xujn.nettyrpc.application.bootstrap.RpcBootstrap;
 import com.xujn.nettyrpc.example.api.HelloService;
-import com.xujn.nettyrpc.infrastructure.loadbalance.RoundRobinLoadBalancer;
+import com.xujn.nettyrpc.domain.annotation.RpcReference;
 import com.xujn.nettyrpc.infrastructure.registry.ZkServiceDiscovery;
-import com.xujn.nettyrpc.infrastructure.serialization.JdkSerializer;
 
 public class ClientApp {
-    public static void main(String[] args) {
-        // 1. 初始化组件
-        var serializer = new JdkSerializer();
-        var discovery = new ZkServiceDiscovery("127.0.0.1:2181");
-        var loadBalancer = new RoundRobinLoadBalancer();
-        var nettyClient = new NettyClient(serializer);
 
-        // 2. 创建代理工厂（超时 5 秒）
-        var proxy = new RpcClientProxy(discovery, loadBalancer, nettyClient, 5000);
-
-        // 3. 生成代理对象
-        HelloService helloService = proxy.create(HelloService.class);
-
-        // 4. 像本地方法一样调用
+    // 默认超时5000ms
+    @RpcReference(timeout = 3000)
+    private HelloService helloService;
+    
+    public void start() {
+        // 像本地方法一样调用
         String result = helloService.sayHello("Netty RPC");
         System.out.println(result);  // 输出: Hello, Netty RPC!
 
         int sum = helloService.add(10, 20);
         System.out.println("10 + 20 = " + sum);  // 输出: 10 + 20 = 30
+    }
 
-        // 5. 关闭
-        nettyClient.shutdown();
+    public static void main(String[] args) {
+        // 1. 初始化 Bootstrap (自动使用 RoundRobin 轮询和 Protobuf)
+        RpcBootstrap bootstrap = RpcBootstrap.builder()
+                .discovery(new ZkServiceDiscovery("127.0.0.1:2181"))
+                .build();
+
+        // 2. 注入被 @RpcReference 标记的字段
+        ClientApp app = new ClientApp();
+        bootstrap.injectReferences(app);
+
+        try {
+            app.start();
+        } finally {
+            // 3. 关闭资源
+            bootstrap.shutdown();
+        }
     }
 }
 ```
@@ -151,12 +167,13 @@ serverB.start();
 
 ## 7. 切换负载均衡策略
 
-```java
-// 随机策略
-var proxy = new RpcClientProxy(discovery, new RandomLoadBalancer(), client, 5000);
+默认使用 `RoundRobinLoadBalancer` (轮询)，可通过 Bootstrap builder 轻松替换为其他策略，如一致性哈希：
 
-// 轮询策略
-var proxy = new RpcClientProxy(discovery, new RoundRobinLoadBalancer(), client, 5000);
+```java
+RpcBootstrap bootstrap = RpcBootstrap.builder()
+        .discovery(new ZkServiceDiscovery("127.0.0.1:2181"))
+        .loadBalancer(new ConsistentHashLoadBalancer()) // 或 RandomLoadBalancer
+        .build();
 ```
 
 ---
