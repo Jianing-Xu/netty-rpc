@@ -127,7 +127,7 @@ public class RpcBootstrap {
             if (ref != null) {
                 Class<?> fieldType = field.getType();
                 RpcClientProxy proxy = new RpcClientProxy(
-                        discovery, loadBalancer, nettyClient, ref.timeout());
+                        discovery, loadBalancer, nettyClient, ref.timeout(), ref.retries());
                 Object proxyInstance = proxy.create(fieldType);
 
                 field.setAccessible(true);

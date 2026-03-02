@@ -23,4 +23,9 @@ public @interface RpcReference {
      * RPC call timeout in milliseconds.
      */
     long timeout() default 5000;
+
+    /**
+     * Number of retries on failure (0 means no retry).
+     */
+    int retries() default 0;
 }

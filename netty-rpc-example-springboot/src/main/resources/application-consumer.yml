@@ -1,0 +1,6 @@
+server:
+  port: 8082
+
+netty-rpc:
+  server-enable: false
+  zk-address: 127.0.0.1:2181

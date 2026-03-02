@@ -26,13 +26,15 @@ public class RpcClientProxy {
     private final LoadBalancer loadBalancer;
     private final NettyClient nettyClient;
     private final long timeoutMs;
+    private final int retries;
 
     public RpcClientProxy(ServiceDiscovery serviceDiscovery, LoadBalancer loadBalancer,
-                          NettyClient nettyClient, long timeoutMs) {
+                          NettyClient nettyClient, long timeoutMs, int retries) {
         this.serviceDiscovery = serviceDiscovery;
         this.loadBalancer = loadBalancer;
         this.nettyClient = nettyClient;
         this.timeoutMs = timeoutMs;
+        this.retries = retries;
     }
 
     @SuppressWarnings("unchecked")
@@ -46,38 +48,58 @@ public class RpcClientProxy {
                         return method.invoke(this, args);
                     }
 
-                    // 1. Build request
-                    RpcRequest request = new RpcRequest(
-                            REQUEST_ID_GEN.incrementAndGet(),
-                            interfaceClass.getName(),
-                            method.getName(),
-                            method.getParameterTypes(),
-                            args
-                    );
-
-                    // 2. Discover + load balance
                     String serviceName = interfaceClass.getName();
-                    List<String> addresses = serviceDiscovery.discover(serviceName);
-                    if (addresses == null || addresses.isEmpty()) {
-                        throw new RpcException("No available servers for: " + serviceName);
+                    int maxTries = retries + 1;
+                    int tryCount = 0;
+                    Throwable lastException = null;
+
+                    while (tryCount < maxTries) {
+                        tryCount++;
+                        try {
+                            // 1. Build request
+                            RpcRequest request = new RpcRequest(
+                                    REQUEST_ID_GEN.incrementAndGet(),
+                                    serviceName,
+                                    method.getName(),
+                                    method.getParameterTypes(),
+                                    args
+                            );
+
+                            // 2. Discover + load balance
+                            List<String> addresses = serviceDiscovery.discover(serviceName);
+                            if (addresses == null || addresses.isEmpty()) {
+                                throw new RpcException("No available servers for: " + serviceName);
+                            }
+                            String address = loadBalancer.select(addresses);
+
+                            String[] parts = address.split(":");
+                            String host = parts[0];
+                            int port = Integer.parseInt(parts[1]);
+
+                            log.debug("Sending request {} to {}:{} (try {}/{})", 
+                                      request.getRequestId(), host, port, tryCount, maxTries);
+
+                            // 3. Send & await response with timeout
+                            RpcResponse response = nettyClient.sendRequest(host, port, request)
+                                    .get(timeoutMs, TimeUnit.MILLISECONDS);
+
+                            // 4. Handle response
+                            if (!response.isSuccess()) {
+                                throw new RpcException(response.getError());
+                            }
+                            return response.getResult();
+
+                        } catch (Exception e) {
+                            lastException = e;
+                            if (tryCount < maxTries) {
+                                log.warn("RPC invocation failed, retrying... (try {}/{}): {}", 
+                                         tryCount, maxTries, e.getMessage());
+                            }
+                        }
                     }
-                    String address = loadBalancer.select(addresses);
 
-                    String[] parts = address.split(":");
-                    String host = parts[0];
-                    int port = Integer.parseInt(parts[1]);
-
-                    log.debug("Sending request {} to {}:{}", request.getRequestId(), host, port);
-
-                    // 3. Send & await response with timeout
-                    RpcResponse response = nettyClient.sendRequest(host, port, request)
-                            .get(timeoutMs, TimeUnit.MILLISECONDS);
-
-                    // 4. Handle response
-                    if (!response.isSuccess()) {
-                        throw new RpcException(response.getError());
-                    }
-                    return response.getResult();
+                    log.error("RPC invocation failed after {} tries for service {}", maxTries, serviceName, lastException);
+                    throw new RpcException("RPC invocation failed after " + maxTries + " tries: " + lastException.getMessage(), lastException);
                 }
         );
     }

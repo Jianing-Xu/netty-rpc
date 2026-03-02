@@ -89,7 +89,7 @@ class IntegrationTest {
     void testEndToEndRpcCall() {
         ServiceDiscovery discovery = new ZkServiceDiscovery(zkClient);
         RpcClientProxy proxy = new RpcClientProxy(
-                discovery, new RoundRobinLoadBalancer(), nettyClient, 5000);
+                discovery, new RoundRobinLoadBalancer(), nettyClient, 5000, 3);
 
         HelloService helloService = proxy.create(HelloService.class);
 
@@ -101,7 +101,7 @@ class IntegrationTest {
     void testEndToEndAddition() {
         ServiceDiscovery discovery = new ZkServiceDiscovery(zkClient);
         RpcClientProxy proxy = new RpcClientProxy(
-                discovery, new RoundRobinLoadBalancer(), nettyClient, 5000);
+                discovery, new RoundRobinLoadBalancer(), nettyClient, 5000, 0);
 
         HelloService helloService = proxy.create(HelloService.class);
 
@@ -113,7 +113,7 @@ class IntegrationTest {
     void testMultipleCallsOnSameProxy() {
         ServiceDiscovery discovery = new ZkServiceDiscovery(zkClient);
         RpcClientProxy proxy = new RpcClientProxy(
-                discovery, new RoundRobinLoadBalancer(), nettyClient, 5000);
+                discovery, new RoundRobinLoadBalancer(), nettyClient, 5000, 0);
 
         HelloService helloService = proxy.create(HelloService.class);
 

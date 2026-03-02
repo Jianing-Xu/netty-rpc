@@ -16,7 +16,9 @@
         <module>netty-rpc-api</module>
         <module>netty-rpc-core</module>
         <module>netty-rpc-registry-zk</module>
+        <module>netty-rpc-spring-boot-starter</module>
         <module>netty-rpc-examples</module>
+        <module>netty-rpc-example-springboot</module>
     </modules>
 
     <properties>
