@@ -140,7 +140,7 @@ private void refill() {
 ```
 Whenever incoming traffic crosses this execution intercept, the architecture implicitly gauges the timestamp differential mapped against its prior refill occurrence. By directly computing the quotient using the assigned rate configuration, tokens hypothetically amassed over this unbridled period are instantly validated, appended (up to capacity bounds), and debited seamlessly block-free. This approach presents remarkably performant, elegant execution dynamics.
 
-### 2.5 The Pinnacle of Non-Blocking: CompletableFuture Server Integration
+### 2.5 Asynchronous Invocation: Server-Side Scheduling Returning CompletableFuture
 
 Lying between the rate limiter blockade and the business thread pool dispatch resides visually the most momentous reactive revamp inside the engine core:
 
