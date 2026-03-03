@@ -8,7 +8,7 @@
 
 - Java 17+
 - Maven 3.8+
-- ZooKeeper 运行中（本地 Docker：`docker start dev-zookeeper`，默认端口 2181）
+- ZooKeeper 运行中（本地开发可使用 Docker：`docker run -d --name zookeeper -p 2181:2181 zookeeper:3.7`）
 
 ### 1.2 构建项目
 
@@ -19,124 +19,105 @@ mvn clean install -DskipTests
 
 ---
 
-## 2. 定义服务接口
+## 2. 定义公共服务接口
 
-服务接口必须放在 Provider 和 Consumer 均可访问的公共路径中。接口须实现 `Serializable`（因参数/返回值需通过网络传输）。
+服务接口必须放在 Provider 和 Consumer 均可访问的公共模块中（如 `netty-rpc-example-api`）。接口对象必须实现 `Serializable`，或者使用 Protobuf 友好的 POJO。
 
 ```java
 package com.xujn.nettyrpc.example.api;
 
+import java.util.concurrent.CompletableFuture;
+
 public interface HelloService {
+    // 1. 同步阻塞调用接口
     String sayHello(String name);
-    int add(int a, int b);
+    // 2. 异步非阻塞调用接口
+    CompletableFuture<String> sayHelloAsync(String name);
 }
 ```
 
 ---
 
-## 3. 实现服务（Provider 端）
+## 3. 标准 Java 程序接入（无 Spring 依赖）
+
+Netty-RPC 框架的核心不依赖 Spring，您可以完全在 Main 方法或原生 Java 程序中使用它。
+
+### 3.1 启动服务端 (Provider)
 
 可使用 `@RpcService` 注解标记服务实现类：
 
 ```java
-package com.xujn.nettyrpc.example.provider;
-
-import com.xujn.nettyrpc.example.api.HelloService;
 import com.xujn.nettyrpc.common.annotation.RpcService;
-
-@RpcService(HelloService.class)
-public class HelloServiceImpl implements HelloService {
-    @Override
-    public String sayHello(String name) {
-        return "Hello, " + name + "!";
-    }
-
-    @Override
-    public int add(int a, int b) {
-        return a + b;
-    }
-}
-```
-
----
-
-## 4. 启动服务端
-
-使用 `RpcBootstrap` 进行包扫描并全自动启动（默认使用 Protobuf 序列化）：
-
-```java
-package com.xujn.nettyrpc.example.provider;
-
 import com.xujn.nettyrpc.core.bootstrap.RpcBootstrap;
 import com.xujn.nettyrpc.registry.zk.ZkServiceRegistry;
 
+@RpcService(value = HelloService.class, limit = 1000) // 开启单机 QPS 限流为 1000
+public class HelloServiceImpl implements HelloService {
+    @Override
+    public String sayHello(String name) { return "Hello, " + name; }
+    
+    @Override
+    public CompletableFuture<String> sayHelloAsync(String name) {
+        return CompletableFuture.completedFuture("Hello Async, " + name); 
+    }
+}
+
 public class ServerApp {
     public static void main(String[] args) throws Exception {
-        // 1. 初始化 Bootstrap
         RpcBootstrap bootstrap = RpcBootstrap.builder()
                 .registry(new ZkServiceRegistry("127.0.0.1:2181"))
                 .host("127.0.0.1")
                 .port(8080)
                 .build();
 
-        // 2. 扫描带有 @RpcService 的包
+        // 自动扫描所在包下的 @RpcService 类并完成注册装配
         bootstrap.scanServices("com.xujn.nettyrpc.example.provider");
-
-        // 3. 启动
         bootstrap.startServer();
-        System.out.println("Server started on 127.0.0.1:8080");
 
-        // 4. 注册关闭钩子
+        // 注册关闭钩子
         Runtime.getRuntime().addShutdownHook(new Thread(bootstrap::shutdown));
     }
 }
 ```
 
-> **注**：也可不使用扫包，手动通过 `bootstrap.addService(HelloService.class, new HelloServiceImpl())` 注册。
+> **注**：也可不使用扫包，手动通过 `bootstrap.addService(HelloService.class, new HelloServiceImpl(), 1000)` 直接注册。
 
----
+### 3.2 启动客户端 (Consumer)
 
-## 5. 启动客户端
-
-使用 `@RpcReference` 注解自动注入代理对象，通过 `RpcBootstrap.injectReferences()` 完成注入：
+使用 `@RpcReference` 注解标识需注入的字段，并通过 `RpcBootstrap` 自动拉起代理：
 
 ```java
-package com.xujn.nettyrpc.example.consumer;
-
-import com.xujn.nettyrpc.core.bootstrap.RpcBootstrap;
-import com.xujn.nettyrpc.example.api.HelloService;
 import com.xujn.nettyrpc.common.annotation.RpcReference;
+import com.xujn.nettyrpc.core.bootstrap.RpcBootstrap;
 import com.xujn.nettyrpc.registry.zk.ZkServiceDiscovery;
 
 public class ClientApp {
 
-    // 默认超时5000ms
-    @RpcReference(timeout = 3000)
+    @RpcReference(timeout = 3000, retries = 3) // 配置超时时间与失败重试次数
     private HelloService helloService;
     
-    public void start() {
-        // 像本地方法一样调用
-        String result = helloService.sayHello("Netty RPC");
-        System.out.println(result);  // 输出: Hello, Netty RPC!
+    public void start() throws Exception {
+        // 1. 发起同步调用
+        System.out.println(helloService.sayHello("Netty RPC"));  
 
-        int sum = helloService.add(10, 20);
-        System.out.println("10 + 20 = " + sum);  // 输出: 10 + 20 = 30
+        // 2. 发起异步响应式调用
+        helloService.sayHelloAsync("Netty Async").thenAccept(res -> {
+            System.out.println("收到异步回调结果: " + res);
+        });
     }
 
-    public static void main(String[] args) {
-        // 1. 初始化 Bootstrap (自动使用 RoundRobin 轮询和 Protobuf)
+    public static void main(String[] args) throws Exception {
         RpcBootstrap bootstrap = RpcBootstrap.builder()
                 .discovery(new ZkServiceDiscovery("127.0.0.1:2181"))
                 .build();
 
-        // 2. 注入被 @RpcReference 标记的字段
         ClientApp app = new ClientApp();
-        bootstrap.injectReferences(app);
+        bootstrap.injectReferences(app); // 完成客户端代理实例的依赖注入
 
         try {
             app.start();
+            Thread.sleep(1000); // 留点时间给异步回调
         } finally {
-            // 3. 关闭资源
             bootstrap.shutdown();
         }
     }
@@ -145,64 +126,105 @@ public class ClientApp {
 
 ---
 
-## 6. 多 Provider 部署
+## 4. Spring Boot 项目接入 (推荐)
 
-同一服务可部署多个实例，客户端自动通过负载均衡选择：
+框架内建了原生的 Spring Boot Starter，能够以最优雅的方式融入现有的微服务体系。
 
-```java
-// Provider A (端口 8080)
-var serverA = new RpcServer("127.0.0.1", 8080, registry, serializer);
-serverA.addService(HelloService.class.getName(), new HelloServiceImpl());
-serverA.start();
+### 4.1 引入 Starter 依赖
 
-// Provider B (端口 8081)
-var serverB = new RpcServer("127.0.0.1", 8081, registry, serializer);
-serverB.addService(HelloService.class.getName(), new HelloServiceImpl());
-serverB.start();
-
-// Client 端无需修改，discovery 自动获取两个地址，loadBalancer 自动轮询
+```xml
+<dependency>
+    <groupId>com.xujn</groupId>
+    <artifactId>netty-rpc-spring-boot-starter</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+</dependency>
 ```
 
----
+### 4.2 `application.yml` 全局配置
 
-## 7. 切换负载均衡策略
-
-默认使用 `RoundRobinLoadBalancer` (轮询)，可通过 Bootstrap builder 轻松替换为其他策略，如一致性哈希：
-
-```java
-RpcBootstrap bootstrap = RpcBootstrap.builder()
-        .discovery(new ZkServiceDiscovery("127.0.0.1:2181"))
-        .loadBalancer(new ConsistentHashLoadBalancer()) // 或 RandomLoadBalancer
-        .build();
+```yaml
+netty-rpc:
+  server:
+    host: 127.0.0.1       # 本机暴露 IP 
+    port: 8080            # 监听端口
+  registry:
+    address: 127.0.0.1:2181 # 服务端连接发现中心的地址
+  client:
+    discovery-address: 127.0.0.1:2181 # 客户端发现中心的地址
+    timeout-ms: 5000      # 全局默认超时时间
+    load-balancer: RoundRobin         # 负载均衡策略
 ```
 
----
+### 4.3 开启 RPC 支持能力
 
-## 8. 异常处理
+在 Spring Boot 启动类上按需打上激活注解：
+- 作为服务端（提供者）：加上 `@EnableRpcServer`
+- 作为客户端（消费者）：加上 `@EnableRpcClient`
 
 ```java
-try {
-    String result = helloService.sayHello("test");
-} catch (RpcException e) {
-    // 服务端业务异常 / 服务不存在 / 网络异常
-    System.err.println("RPC call failed: " + e.getMessage());
-} catch (Exception e) {
-    // TimeoutException → 超时
-    // 其他未预期异常
-    System.err.println("Unexpected error: " + e.getMessage());
+@SpringBootApplication
+@EnableRpcServer
+@EnableRpcClient
+public class SpringBootRpcApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(SpringBootRpcApplication.class, args);
+    }
+}
+```
+
+### 4.4 服务端开发 (Provider)
+此时 `@RpcService` 将直接充当 Spring 的 `@Component` 注册容器：
+```java
+import com.xujn.nettyrpc.common.annotation.RpcService;
+
+// 提供高并发原生的令牌桶限流 (1000/s) 支持
+@RpcService(value = HelloService.class, limit = 1000)
+public class SpringHelloServiceImpl implements HelloService {
+    @Override
+    public String sayHello(String name) { return "Spring: " + name; }
+}
+```
+
+### 4.5 客户端开发 (Consumer)
+在 Controller 或任何由 Spring 管理的 Bean 中直接注入调用即可：
+```java
+import com.xujn.nettyrpc.common.annotation.RpcReference;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class HelloController {
+    
+    @RpcReference(retries = 3)
+    private HelloService helloService;
+
+    @GetMapping("/hello")
+    public String hello(String name) {
+        return helloService.sayHello(name);
+    }
 }
 ```
 
 ---
 
-## 9. 配置参数
+## 5. 高级特性用法
 
-| 参数 | 位置 | 默认值 | 说明 |
-|------|------|--------|------|
-| `timeoutMs` | `RpcClientProxy` 构造 | 5000 | RPC 调用超时（毫秒） |
-| `CONNECT_TIMEOUT_MILLIS` | `NettyClient` | 5000 | TCP 连接超时 |
-| `sessionTimeoutMs` | `ZkServiceRegistry` | 5000 | ZK 会话超时 |
-| `connectionTimeoutMs` | `ZkServiceRegistry` | 3000 | ZK 连接超时 |
-| BossGroup 线程数 | `RpcServer` | 1 | Netty Accept 线程 |
-| WorkerGroup 线程数 | `RpcServer` | CPU*2 | Netty I/O 线程 |
-| 业务线程池大小 | `RpcServerHandler` | CPU*2 | 反射调用隔离线程 |
+### 5.1 多实例 Provider 部署 (负载均衡)
+同一服务可在多个不同端口/服务器部署。Consumer 会自动发现他们：
+```java
+// Client 端代码无需修改，只需替换 yml 或者 Bootstrap 里的属性
+// 支持: RoundRobin (轮询默认)、Random (随机)、ConsistentHash (一致性哈希)
+netty-rpc:
+  client:
+    load-balancer: ConsistentHash
+```
+
+### 5.2 熔断与异常处理
+网络抖动或服务端过载被限流：
+```java
+try {
+    String res = helloService.sayHello("Traffic Peak");
+} catch (RpcException e) {
+    // 处理如 "Server is busy. Rate limit exceeded..." 安全返回降级值
+}
+```

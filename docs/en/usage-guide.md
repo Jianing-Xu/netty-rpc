@@ -8,7 +8,7 @@
 
 - Java 17+
 - Maven 3.8+
-- ZooKeeper running (Local Docker: `docker start dev-zookeeper`, default port 2181)
+- ZooKeeper running (Local dev via Docker: `docker run -d --name zookeeper -p 2181:2181 zookeeper:3.7`)
 
 ### 1.2 Build the Framework
 
@@ -19,124 +19,103 @@ mvn clean install -DskipTests
 
 ---
 
-## 2. Define Service Interface
+## 2. Define Public Service Interface
 
-Service API interfaces must reside within a common module or path accessible to both the Consumer and the Provider applications.
+Service API interfaces must reside within a common module accessible to both Consumer and Provider applications. The return object and arguments must implement `Serializable`, or be Protobuf-friendly POJOs.
 
 ```java
 package com.xujn.nettyrpc.example.api;
 
+import java.util.concurrent.CompletableFuture;
+
 public interface HelloService {
+    // 1. Synchronous blocking interface
     String sayHello(String name);
-    int add(int a, int b);
+    // 2. Asynchronous non-blocking interface
+    CompletableFuture<String> sayHelloAsync(String name);
 }
 ```
 
 ---
 
-## 3. Implement the Service (Provider end)
+## 3. Standard Java Program Integration (No Spring Dependency)
 
-Use the `@RpcService` annotation to mark your implementation class:
+Netty-RPC framework core is independent of Spring; it can function robustly standalone in pure Java programs or Main methods.
+
+### 3.1 Bootstrap the Server (Provider)
+
+Use the `@RpcService` annotation to demarcate your implementation class:
 
 ```java
-package com.xujn.nettyrpc.example.provider;
-
-import com.xujn.nettyrpc.example.api.HelloService;
 import com.xujn.nettyrpc.common.annotation.RpcService;
-
-@RpcService(HelloService.class)
-public class HelloServiceImpl implements HelloService {
-    @Override
-    public String sayHello(String name) {
-        return "Hello, " + name + "!";
-    }
-
-    @Override
-    public int add(int a, int b) {
-        return a + b;
-    }
-}
-```
-
----
-
-## 4. Bootstrapping the Server
-
-Use `RpcBootstrap` to scan packages and automatically deploy your annotated services to Netty and ZooKeeper. (Default serialization: Protobuf).
-
-```java
-package com.xujn.nettyrpc.example.provider;
-
 import com.xujn.nettyrpc.core.bootstrap.RpcBootstrap;
 import com.xujn.nettyrpc.registry.zk.ZkServiceRegistry;
 
+@RpcService(value = HelloService.class, limit = 1000) // Enables TokenBucket rate limit of 1000 QPS
+public class HelloServiceImpl implements HelloService {
+    @Override
+    public String sayHello(String name) { return "Hello, " + name; }
+    
+    @Override
+    public CompletableFuture<String> sayHelloAsync(String name) {
+        return CompletableFuture.completedFuture("Hello Async, " + name); 
+    }
+}
+
 public class ServerApp {
     public static void main(String[] args) throws Exception {
-        // 1. Initialize Bootstrap
         RpcBootstrap bootstrap = RpcBootstrap.builder()
                 .registry(new ZkServiceRegistry("127.0.0.1:2181"))
                 .host("127.0.0.1")
                 .port(8080)
                 .build();
 
-        // 2. Scan packages containing @RpcService
+        // Performs dynamic classpath scanning for @RpcService annotated components 
         bootstrap.scanServices("com.xujn.nettyrpc.example.provider");
-
-        // 3. Start Server
         bootstrap.startServer();
-        System.out.println("Server started on 127.0.0.1:8080");
 
-        // 4. Register Shutdown Hook
+        // Register Graceful Shutdown
         Runtime.getRuntime().addShutdownHook(new Thread(bootstrap::shutdown));
     }
 }
 ```
 
-> **Note**: Alternative to scanning, manual registration works via `bootstrap.addService(HelloService.class, new HelloServiceImpl())`.
+### 3.2 Bootstrap the Client (Consumer)
 
----
-
-## 5. Bootstrapping the Client
-
-Use the `@RpcReference` annotation to automatically inject proxy instances via `RpcBootstrap.injectReferences()`:
+Mark required service instances with the `@RpcReference` annotation and kick-start dependencies parsing using `RpcBootstrap`:
 
 ```java
-package com.xujn.nettyrpc.example.consumer;
-
-import com.xujn.nettyrpc.core.bootstrap.RpcBootstrap;
-import com.xujn.nettyrpc.example.api.HelloService;
 import com.xujn.nettyrpc.common.annotation.RpcReference;
+import com.xujn.nettyrpc.core.bootstrap.RpcBootstrap;
 import com.xujn.nettyrpc.registry.zk.ZkServiceDiscovery;
 
 public class ClientApp {
 
-    // Default timeout: 5000ms. Overridden to 3000ms here.
-    @RpcReference(timeout = 3000)
+    @RpcReference(timeout = 3000, retries = 3) // Set fallback timeouts & retry fault-tolerance 
     private HelloService helloService;
     
-    public void start() {
-        // Use exactly like a local Java Method!
-        String result = helloService.sayHello("Netty RPC");
-        System.out.println(result);  // Output: Hello, Netty RPC!
+    public void start() throws Exception {
+        // 1. Synchronous invocation
+        System.out.println(helloService.sayHello("Netty RPC"));  
 
-        int sum = helloService.add(10, 20);
-        System.out.println("10 + 20 = " + sum);  // Output: 10 + 20 = 30
+        // 2. Pure Async Reactive Invocation
+        helloService.sayHelloAsync("Netty Async").thenAccept(res -> {
+            System.out.println("Received async callback resolving: " + res);
+        });
     }
 
-    public static void main(String[] args) {
-        // 1. Initialize Bootstrap (Defaults to RoundRobin LB & Protobuf)
+    public static void main(String[] args) throws Exception {
         RpcBootstrap bootstrap = RpcBootstrap.builder()
                 .discovery(new ZkServiceDiscovery("127.0.0.1:2181"))
                 .build();
 
-        // 2. Process and inject @RpcReference fields
         ClientApp app = new ClientApp();
-        bootstrap.injectReferences(app);
+        bootstrap.injectReferences(app); // Automates the proxy injection
 
         try {
             app.start();
+            Thread.sleep(1000); // Leave a time slice for async threads to complete
         } finally {
-            // 3. Graceful Shutdown
             bootstrap.shutdown();
         }
     }
@@ -145,63 +124,105 @@ public class ClientApp {
 
 ---
 
-## 6. Multi-Provider Deployment
+## 4. Spring Boot Program Integration (Recommended)
 
-You can deploy multiple instances of the same service. Clients automatically balance the load:
+The framework is packaged with a native Spring Boot Starter making enterprise integrations exceptionally elegant in your existing micro-services environment.
 
-```java
-// Provider Instance A (Port 8080)
-RpcBootstrap btA = RpcBootstrap.builder().host("127.0.0.1").port(8080).build();
-// ... (start)
+### 4.1 Incorporate Starter Dependency
 
-// Provider Instance B (Port 8081)
-RpcBootstrap btB = RpcBootstrap.builder().host("127.0.0.1").port(8081).build();
-// ... (start)
-
-// Consumer Code remains 100% untouched. Discovery catches both, LB alternates between them.
+```xml
+<dependency>
+    <groupId>com.xujn</groupId>
+    <artifactId>netty-rpc-spring-boot-starter</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+</dependency>
 ```
 
----
+### 4.2 `application.yml` Global Configuration
 
-## 7. Changing Load Balancing Strategies
-
-The default is `RoundRobinLoadBalancer`. You can effortlessly switch policies—such as Consistent Hashing—during client Bootstrap building:
-
-```java
-import com.xujn.nettyrpc.core.loadbalance.ConsistentHashLoadBalancer;
-
-RpcBootstrap bootstrap = RpcBootstrap.builder()
-        .discovery(new ZkServiceDiscovery("127.0.0.1:2181"))
-        .loadBalancer(new ConsistentHashLoadBalancer()) // Swap policy here!
-        .build();
+```yaml
+netty-rpc:
+  server:
+    host: 127.0.0.1       # Self-exposing Provider IP 
+    port: 8080            # Listening Port
+  registry:
+    address: 127.0.0.1:2181 # Server registration center address
+  client:
+    discovery-address: 127.0.0.1:2181 # Client discovery center address
+    timeout-ms: 5000      # Global fallback timeout 
+    load-balancer: RoundRobin         # Distributed LoadBalancing Strategy
 ```
 
----
+### 4.3 Empower RPC Capabilities
 
-## 8. Exception Handling
+Place enablement modifiers seamlessly in your main `@SpringBootApplication` context:
+- For Provider Context: append `@EnableRpcServer`
+- For Consumer Context: append `@EnableRpcClient`
 
 ```java
-try {
-    String result = helloService.sayHello("test");
-} catch (RpcException e) {
-    // Expected server logic exceptions / Target Offline / Protocol Decoding errors
-    System.err.println("RPC call failed: " + e.getMessage());
-} catch (Exception e) {
-    // TimeoutException → No response returned in time
-    // Undocumented network failures
-    System.err.println("Unexpected error: " + e.getMessage());
+@SpringBootApplication
+@EnableRpcServer
+@EnableRpcClient
+public class SpringBootRpcApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(SpringBootRpcApplication.class, args);
+    }
+}
+```
+
+### 4.4 Exposing Backend Service (Provider)
+Your `@RpcService` now dual-acts natively as a Spring-managed `@Component`:
+```java
+import com.xujn.nettyrpc.common.annotation.RpcService;
+
+// Integrates high-concurrency TokenBucket threshold limits
+@RpcService(value = HelloService.class, limit = 1000)
+public class SpringHelloServiceImpl implements HelloService {
+    @Override
+    public String sayHello(String name) { return "Spring: " + name; }
+}
+```
+
+### 4.5 Discovering Proxies via Spring (Consumer)
+Consume via injecting fields across any bean elements such as Controllers or other nested Services:
+```java
+import com.xujn.nettyrpc.common.annotation.RpcReference;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class HelloController {
+    
+    @RpcReference(retries = 3)
+    private HelloService helloService;
+
+    @GetMapping("/hello")
+    public String hello(String name) {
+        return helloService.sayHello(name);
+    }
 }
 ```
 
 ---
 
-## 9. Configuration Tuning
+## 5. Advanced Feature Insights
 
-| Parameter | Location | Default | Description |
-|-----------|----------|---------|-------------|
-| `timeoutMs` | `@RpcReference` | 5000 | RPC invocation blocking timeout in ms |
-| `CONNECT_TIMEOUT_MILLIS` | `NettyClient` | 5000 | Netty Bootstrap TCP timeout |
-| `sessionTimeoutMs` | `ZkServiceRegistry` | 5000 | Curator Client ZK eviction threshold |
-| BossGroup Thread Cnt | `RpcServer` | 1 | Reactor thread for TCP incoming accepts |
-| WorkerGroup Thread Cnt| `RpcServer` | CPU*2 | Parallel I/O threads |
-| Business Thread Pool | `RpcServerHandler` | CPU*2 | Reflected methods execution space |
+### 5.1 Multi-Instance Load Balancing Deployment
+Spawn identical services scaling over arbitrary topologies. The Consumer handles discoveries under-the-hood:
+```yaml
+# Inside Consumer application.yml 
+# Available policies: RoundRobin (Default), Random, ConsistentHash
+netty-rpc:
+  client:
+    load-balancer: ConsistentHash
+```
+
+### 5.2 Graceful Network Fault Handling
+Trap framework generated `RpcException` upon networking jitters or server saturation limit denials:
+```java
+try {
+    String res = helloService.sayHello("Traffic Flood");
+} catch (RpcException e) {
+    // Graceful fallback interception for: "Server is busy. Rate limit exceeded..." 
+}
+```

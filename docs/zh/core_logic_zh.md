@@ -140,14 +140,14 @@ private void refill() {
 ```
 当流量经过该请求入口时，系统会自动计算 "当前时间" 距离 "上一次产生配额时间" 的差值，瞬间乘上速率推导算出这期间本应下方的积攒令牌，无阻塞完成安全加算并直接扣减，极为高效、优雅。
 
-### 2.5 极致非阻塞：返回 CompletableFuture 的服务端调度
+### 2.5 异步调用：返回 CompletableFuture 的服务端调度
 
 在限流器拦截与业务线程派发之间，存在本次引擎升级最具价值的响应式改造设计：
 
 ```mermaid
 graph LR
     A[RpcServerHandler] -->|反射调用| B(HelloServiceImpl)
-    B -->|返回| C{{CompletableFuture.completedFuture(...)}}
+    B -->|返回| C{{"CompletableFuture.completedFuture(...)"}}
     C -->|instanceof 判定为 Future| D[注册 whenComplete 回调]
     D -.->|挂起并立即释放 bizThread| E(框架让出 CPU)
     C -->|由其它网络/中间件线程 Complete| F[触发 Netty writeAndFlush 回传包]

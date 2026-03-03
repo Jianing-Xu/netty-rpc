@@ -147,7 +147,7 @@ Lying between the rate limiter blockade and the business thread pool dispatch re
 ```mermaid
 graph LR
     A[RpcServerHandler] -->|Reflective Call| B(HelloServiceImpl)
-    B -->|Yields| C{{CompletableFuture.completedFuture(...)}}
+    B -->|Yields| C{{"CompletableFuture.completedFuture(...)"}}
     C -->|instanceof Checks Type Future| D[Registers whenComplete Callback Hook]
     D -.->|Suspends Execution & Releases Thread Instantly| E(Framework Relinquishes Thread Compute)
     C -->|Later Completed by external I/O Threads| F[Triggers Netty writeAndFlush Dispatch]
